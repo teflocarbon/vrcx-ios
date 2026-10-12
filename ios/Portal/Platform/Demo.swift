@@ -201,6 +201,11 @@ enum Demo {
         var group = VRCNotificationV2(id: "not_00000000-0000-0000-0000-000000000009", type: "group.announcement")
         group.title = "Test Group posted an announcement"
         group.message = "Movie night is on Saturday at 8. Bring snacks, and a friend if you like."
+        // VRChat's own wording for these, long as it is
+        group.responses = [
+            VRCNotificationV2.Response(type: "delete", data: nil, icon: "check", text: "Acknowledge and dismiss this notification"),
+            VRCNotificationV2.Response(type: "unsubscribe", data: nil, icon: "bell-slash", text: "Unsubscribe from this group's announcements"),
+        ]
         group.createdAt = ago(300)
         group.seen = true
         group.imageUrl = picture("popcorn.fill", 0xC2366B, 0xE0A040)

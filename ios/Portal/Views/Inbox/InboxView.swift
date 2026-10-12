@@ -112,7 +112,9 @@ struct InboxRow: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(item.senderName ?? friend?.name ?? title)
                         .font(.body.weight(.semibold))
-                        .lineLimit(1)
+                        // A group notice's title carries the group and the
+                        // subject: give it room
+                        .lineLimit(item.senderId == nil ? 2 : 1)
                     if let friend, friends.isFavourite(friend) {
                         Image(systemName: "star.fill")
                             .font(.caption2)
@@ -223,21 +225,41 @@ struct InboxRow: View {
                     .buttonStyle(.bordered)
             case .group, .other:
                 if case .v2(let n) = item.source {
-                    ForEach(n.responses ?? [], id: \.self) { response in
-                        Button(response.text ?? response.type.capitalized) {
-                            Task {
-                                do {
-                                    try await inbox.respond(item, with: response)
-                                } catch {
-                                    actions.show(error.userMessage, symbol: "exclamationmark.triangle.fill", failed: true)
+                    let responses = n.responses ?? []
+                    // VRChat labels these with whole sentences ("Acknowledge
+                    // and dismiss this notification"): the common ones get a
+                    // short name as buttons, the rest go in a menu
+                    ForEach(responses.filter { Self.shortName($0) != nil }, id: \.self) { response in
+                        if response.type == "accept" {
+                            Button(Self.shortName(response) ?? "") { respond(response) }
+                                .buttonStyle(.borderedProminent)
+                        } else {
+                            Button(Self.shortName(response) ?? "") { respond(response) }
+                                .buttonStyle(.bordered)
+                        }
+                    }
+                    let link = n.link.flatMap(URL.init(string:)).flatMap { $0.scheme == "https" ? $0 : nil }
+                    let others = responses.filter { Self.shortName($0) == nil }
+                    if !others.isEmpty || link != nil {
+                        Menu {
+                            if let link {
+                                Link(destination: link) {
+                                    Label(n.linkText ?? "Open Link", systemImage: "safari")
                                 }
                             }
+                            ForEach(others, id: \.self) { response in
+                                Button(role: Self.isDestructive(response) ? .destructive : nil) {
+                                    respond(response)
+                                } label: {
+                                    Label(response.text ?? response.type.capitalized, systemImage: Self.symbol(response))
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .frame(minHeight: 18)
                         }
                         .buttonStyle(.bordered)
-                    }
-                    if let link = n.link, let url = URL(string: link), url.scheme == "https" {
-                        Link(n.linkText ?? "Open", destination: url)
-                            .buttonStyle(.bordered)
+                        .accessibilityLabel("More Choices")
                     }
                 }
             default:
@@ -252,6 +274,45 @@ struct InboxRow: View {
         // Several buttons in one row: tapping the row mustn't press them all
         .buttonStyle(.borderless)
         .disabled(busy)
+    }
+
+    private func respond(_ response: VRCNotificationV2.Response) {
+        Task {
+            do {
+                try await inbox.respond(item, with: response)
+            } catch {
+                actions.show(error.userMessage, symbol: "exclamationmark.triangle.fill", failed: true)
+            }
+        }
+    }
+
+    /// A button-sized name for VRChat's common choices; nil for the rest,
+    /// which go in the menu with VRChat's own words
+    static func shortName(_ response: VRCNotificationV2.Response) -> String? {
+        switch response.type {
+        case "accept": return "Accept"
+        case "decline", "reject", "deny": return "Decline"
+        case "delete", "dismiss", "acknowledge": return "Dismiss"
+        case "unsubscribe", "block", "report": return nil
+        default:
+            guard let text = response.text, text.count <= 14 else { return nil }
+            return text
+        }
+    }
+
+    static func isDestructive(_ response: VRCNotificationV2.Response) -> Bool {
+        ["unsubscribe", "block", "report", "decline", "reject", "deny"].contains(response.type)
+    }
+
+    static func symbol(_ response: VRCNotificationV2.Response) -> String {
+        switch response.type {
+        case "unsubscribe": "bell.slash"
+        case "block": "hand.raised"
+        case "report": "exclamationmark.bubble"
+        case "accept": "checkmark"
+        case "decline", "reject", "deny": "xmark"
+        default: "arrow.turn.up.right"
+        }
     }
 
     private func clear() async {
