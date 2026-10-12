@@ -15,9 +15,11 @@ struct YouView: View {
                         ProfileHeader(me: me)
                             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                             .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         StatusRail(me: me)
                             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
                             .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                     }
                     StatusMessageSection(me: me)
                     if let location = me.location {

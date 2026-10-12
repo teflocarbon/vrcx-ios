@@ -31,9 +31,11 @@ struct UserView: View {
                 header
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 16, trailing: 16))
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 StatsStrip(items: stats)
                     .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
 
             if let friend, friend.isInGame {
@@ -116,7 +118,7 @@ struct UserView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 16) {
-            AvatarView(id: userId, name: user.name, url: user.largeImageURL, size: 104)
+            AvatarView(id: userId, name: user.name, url: user.largeImageURL, size: 96)
             VStack(alignment: .leading, spacing: 6) {
                 Text(user.name)
                     .font(.title2.weight(.bold))
@@ -129,7 +131,7 @@ struct UserView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 }
-                HStack(spacing: 6) {
+                FlowLayout(spacing: 6) {
                     if friend != nil {
                         Badge("Friend", color: .accentColor)
                     }
@@ -140,10 +142,10 @@ struct UserView: View {
                         Badge("In Your Instance", color: Palette.canJoin)
                     }
                 }
-                Spacer(minLength: 4)
                 primaryButton
+                    .padding(.top, 4)
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -182,7 +184,7 @@ struct UserView: View {
         let trust = TrustRank(tags: user.tags)
         items.append(.init(label: "Trust", value: trust.name, color: trust.color))
         if let friend, friend.isInGame, let since = friend.locationSince {
-            items.append(.init(label: "Here For", value: since.durationSince, detail: "since Portal saw"))
+            items.append(.init(label: "Here For", value: since.durationSince, detail: "in this instance"))
         } else if let friend, friend.state == .offline, let seen = Date(vrchat: user.lastLogin) {
             items.append(.init(label: "Last Seen", value: seen.shortAgo))
         }

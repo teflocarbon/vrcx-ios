@@ -22,9 +22,10 @@ APP="$ROOT/ios/build/Build/Products/Debug-iphonesimulator/Portal.app"
 echo "== Booting a simulator"
 RUNTIME=$(xcrun simctl list runtimes iOS -j | python3 -c "import json,sys; r=[x for x in json.load(sys.stdin)['runtimes'] if x['isAvailable']]; print(r[-1]['identifier'])")
 DEVICE_TYPE=$(xcrun simctl list devicetypes -j | python3 -c "
-import json, sys
-names = [d['identifier'] for d in json.load(sys.stdin)['devicetypes'] if d['name'].startswith('iPhone') and 'Pro' in d['name'] and 'Max' not in d['name']]
-print(names[-1])")
+import json, re, sys
+types = [d for d in json.load(sys.stdin)['devicetypes'] if re.fullmatch(r'iPhone [0-9]+ Pro', d['name'])]
+# The newest: the highest model number
+print(max(types, key=lambda d: int(d['name'].split()[1]))['identifier'])")
 echo "$RUNTIME on $DEVICE_TYPE"
 UDID=$(xcrun simctl create portal-shots "$DEVICE_TYPE" "$RUNTIME")
 trap 'xcrun simctl shutdown "$UDID" >/dev/null 2>&1; xcrun simctl delete "$UDID" >/dev/null 2>&1' EXIT

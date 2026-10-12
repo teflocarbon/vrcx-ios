@@ -45,10 +45,12 @@ struct InstanceView: View {
                 .onTapGesture { open(.world(place.worldId)) }
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
                 .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
 
                 StatsStrip(items: stats)
                     .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
 
             Section {

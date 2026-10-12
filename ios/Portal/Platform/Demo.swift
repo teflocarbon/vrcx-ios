@@ -139,6 +139,7 @@ enum Demo {
         me.userIcon = picture("sparkles", 0x2F7FD0, 0x4A40D6)
         me.presence = CurrentUser.Presence(world: worldId(1), instance: instance(1, 48213, "~hidden(\(userId(1)))"), platform: "standalonewindows")
         me.statusHistory = ["making a phone app", "come hang out!", "afk"]
+        me.tags = ["system_trust_veteran", "language_eng"]
         return me
     }()
 

@@ -124,10 +124,12 @@ struct InboxRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Text(item.headline(worldName: worldName))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                if case .v1 = item.source {
+                    Text(item.headline(worldName: worldName))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
                 if let note = item.note, !note.isEmpty, item.kind != .group {
                     Text("“\(note)”")
                         .font(.subheadline)
@@ -146,11 +148,11 @@ struct InboxRow: View {
         }
     }
 
+    /// A group notice leads with its own title ("Test Group posted an
+    /// announcement"); anything else from no one is just a notification
     private var title: String {
-        switch item.kind {
-        case .group: "Group"
-        default: "Notification"
-        }
+        if case .v2(let n) = item.source, let title = n.title, !title.isEmpty { return title }
+        return item.kind == .group ? "Group" : "Notification"
     }
 
     @ViewBuilder

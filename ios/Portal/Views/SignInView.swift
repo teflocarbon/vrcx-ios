@@ -38,7 +38,7 @@ struct SignInView: View {
                             ChoiceCard(
                                 symbol: "server.rack",
                                 title: "Connect to Your Relay",
-                                detail: "Recommended. Your relay holds your VRChat session, sends push notifications and keeps history. Your password never reaches this phone.",
+                                detail: "Your relay holds your VRChat session, sends push notifications and keeps history. Your password never reaches this phone.",
                                 badge: "Recommended"
                             )
                         }

@@ -30,11 +30,13 @@ struct WorldView: View {
                 }
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
                 .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
 
                 if let world {
                     StatsStrip(items: stats(world))
                         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
                         .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
             }
 

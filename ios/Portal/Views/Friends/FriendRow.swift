@@ -20,6 +20,15 @@ struct FriendRow: View {
                             .foregroundStyle(.yellow)
                             .accessibilityLabel("Favourite")
                     }
+                    Spacer(minLength: 6)
+                    if friend.isInGame, friend.place.isInstance, let since = friend.locationSince {
+                        // How long they've been there, like a timestamp
+                        TimelineView(.periodic(from: .now, by: 60)) { _ in
+                            Text(since.durationSince)
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 HStack(spacing: 6) {
                     StatusDot(status: friend.status, hollow: friend.state == .active)
@@ -81,11 +90,9 @@ struct FriendRow: View {
     private var locationText: String {
         var parts = [store.locationText(for: friend)]
         let place = friend.place
-        if friend.isInGame && place.isInstance {
+        // Next to "With You" the access type says nothing new, and costs room
+        if friend.isInGame && place.isInstance && !store.isWithYou(friend) {
             parts.append(place.accessName)
-            if let since = friend.locationSince {
-                parts.append(since.durationSince)
-            }
         } else if friend.state == .active, let platform = friend.platformName {
             parts.append(platform)
         }

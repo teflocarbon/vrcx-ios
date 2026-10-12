@@ -15,28 +15,28 @@ struct StatsStrip: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     if index > 0 {
-                        Divider().frame(height: 36)
+                        Divider().frame(height: 40).padding(.top, 6)
                     }
-                    VStack(spacing: 3) {
+                    // Every column the same shape, detail or not, so they line up
+                    VStack(spacing: 4) {
                         Text(item.label.uppercased())
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Text(item.value)
-                            .font(.title3.weight(.semibold))
+                            .font(.headline)
                             .foregroundStyle(item.color ?? .primary)
                             .lineLimit(1)
-                        if let detail = item.detail {
-                            Text(detail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                            .minimumScaleFactor(0.75)
+                        Text(item.detail ?? " ")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    .frame(minWidth: 92)
-                    .padding(.horizontal, 10)
+                    .frame(width: 104)
+                    .padding(.horizontal, 4)
                 }
             }
             .padding(.horizontal, 6)
@@ -135,5 +135,43 @@ func languages(from tags: [String]?) -> [String] {
         guard tag.hasPrefix("language_") else { return nil }
         let code = String(tag.dropFirst("language_".count))
         return signed[code] ?? Locale.current.localizedString(forLanguageCode: code) ?? code.uppercased()
+    }
+}
+
+/// Small things side by side, wrapping onto the next line when they run
+/// out of room: badges under a name
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0, widest: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                x = 0
+                y += row + spacing
+                row = 0
+            }
+            x += size.width + spacing
+            row = max(row, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return CGSize(width: widest, height: y + row)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, row: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX && x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += row + spacing
+                row = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            row = max(row, size.height)
+        }
     }
 }
