@@ -33,6 +33,15 @@ enum FeedFilter: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
+    var symbol: String {
+        switch self {
+        case .all: "list.bullet"
+        case .online: "circle.inset.filled"
+        case .location: "mappin.and.ellipse"
+        case .status: "text.bubble"
+        }
+    }
+
     var title: String {
         switch self {
         case .all: "All"

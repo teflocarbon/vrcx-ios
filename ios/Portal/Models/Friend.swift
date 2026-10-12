@@ -114,6 +114,16 @@ enum FriendFilter: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
+    var symbol: String {
+        switch self {
+        case .all: "person.2"
+        case .online: "circle.inset.filled"
+        case .joinable: "arrow.right.circle"
+        case .favourites: "star"
+        case .offline: "moon.zzz"
+        }
+    }
+
     var title: String {
         switch self {
         case .all: "All"

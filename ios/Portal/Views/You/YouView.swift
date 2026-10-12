@@ -181,7 +181,8 @@ private struct StatusPill: View {
             .foregroundStyle(.primary)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .glassCapsule()
+            // The same solid capsule as the filter chips
+            .background(.fill.tertiary, in: Capsule())
         }
         // Menus tint their label: only the dot should carry colour
         .tint(.primary)

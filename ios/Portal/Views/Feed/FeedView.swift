@@ -13,7 +13,9 @@ struct FeedView: View {
         NavigationStack(path: $path) {
             List {
                 Section {
-                    FilterChips(options: FeedFilter.allCases, selection: $filter, title: \.title)
+                    FilterChips(options: FeedFilter.allCases, selection: $filter, title: \.title, symbol: \.symbol) { option in
+                        feed.filtered(option, people: friends.people(in: feed.audience), search: search).count
+                    }
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                 }

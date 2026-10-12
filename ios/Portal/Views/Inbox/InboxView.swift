@@ -12,8 +12,8 @@ struct InboxView: View {
         NavigationStack(path: $path) {
             List {
                 Section {
-                    FilterChips(options: InboxFilter.allCases, selection: $filter, title: \.title) { option in
-                        option == .unread ? inbox.unreadCount : nil
+                    FilterChips(options: InboxFilter.allCases, selection: $filter, title: \.title, symbol: \.symbol) { option in
+                        inbox.filtered(option).count
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)

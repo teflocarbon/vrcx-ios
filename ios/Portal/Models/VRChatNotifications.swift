@@ -213,6 +213,15 @@ enum InboxFilter: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
+    var symbol: String {
+        switch self {
+        case .all: "tray"
+        case .social: "person.2"
+        case .groups: "person.3"
+        case .unread: "envelope.badge"
+        }
+    }
+
     var title: String {
         switch self {
         case .all: "All"

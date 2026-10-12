@@ -1,9 +1,9 @@
 import SwiftUI
 import UIKit
 
-// The wrist's palette, mapped to iOS: its soft presence colours in dark
-// mode, and deeper versions of the same hues in light mode, where the
-// wrist's pastels would wash out on white.
+// Presence colours: VRChat's own green, blue, orange and red, softened a
+// little and deepened for light mode. The wrist's pastels suit glass in VR
+// but read as washed out on a phone (seen on a device in October 2026).
 
 extension Color {
     init(light: UInt32, dark: UInt32) {
@@ -33,10 +33,10 @@ extension UIColor {
 }
 
 enum Palette {
-    static let online = Color(light: 0x3E9A6A, dark: 0x93B7A3)
-    static let joinMe = Color(light: 0x2F7FD0, dark: 0x90B9D6)
-    static let askMe = Color(light: 0xB7832A, dark: 0xC6B38C)
-    static let busy = Color(light: 0xC2505C, dark: 0xC69396)
+    static let online = Color(light: 0x2FA35A, dark: 0x4FD27C)
+    static let joinMe = Color(light: 0x1F7FD6, dark: 0x45B4F5)
+    static let askMe = Color(light: 0xD9781C, dark: 0xF29A3A)
+    static let busy = Color(light: 0xD23F4A, dark: 0xF2575F)
     static let offline = Color.secondary
 
     static let canJoin = Color(light: 0x2E9466, dark: 0x8EDDB4)

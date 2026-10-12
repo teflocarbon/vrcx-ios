@@ -14,7 +14,7 @@ struct FriendsView: View {
         NavigationStack(path: $path) {
             List {
                 Section {
-                    FilterChips(options: FriendFilter.allCases, selection: $filter, title: \.title) { option in
+                    FilterChips(options: FriendFilter.allCases, selection: $filter, title: \.title, symbol: \.symbol) { option in
                         count(for: option)
                     }
                     .listRowInsets(EdgeInsets())
@@ -113,9 +113,11 @@ struct FriendsView: View {
 
     private func count(for filter: FriendFilter) -> Int? {
         switch filter {
+        case .all: store.friends.count
         case .online: store.friends.values.filter { $0.state != .offline }.count
         case .joinable: store.joinableCount
-        default: nil
+        case .favourites: store.favouriteIds.count
+        case .offline: store.friends.values.filter { $0.state == .offline }.count
         }
     }
 

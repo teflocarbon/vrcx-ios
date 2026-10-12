@@ -180,11 +180,14 @@ struct AccessBadge: View {
     }
 }
 
-/// A horizontal row of glass chips for a list's filter
+/// A list's filters as a row of chips, as in WarpSign's library: a symbol,
+/// a name and how many each has, filled with the accent when chosen, and
+/// quieter when empty
 struct FilterChips<Value: Hashable & Identifiable>: View {
     let options: [Value]
     @Binding var selection: Value
     let title: (Value) -> String
+    let symbol: (Value) -> String
     var count: ((Value) -> Int?)?
 
     var body: some View {
@@ -192,23 +195,27 @@ struct FilterChips<Value: Hashable & Identifiable>: View {
             HStack(spacing: 8) {
                 ForEach(options) { option in
                     let selected = option == selection
+                    let number = count?(option)
                     Button {
                         withAnimation(.snappy) { selection = option }
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 5) {
+                            Image(systemName: symbol(option))
                             Text(title(option))
-                            if let number = count?(option) {
+                            if let number {
                                 Text("\(number)")
-                                    .foregroundStyle(selected ? Color.white.opacity(0.85) : Color.secondary)
+                                    .foregroundStyle(selected ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.secondary))
                             }
                         }
-                        .font(.subheadline.weight(selected ? .semibold : .regular))
-                        .foregroundStyle(selected ? Color.white : Color.primary)
-                        .padding(.horizontal, 14)
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 12)
                         .padding(.vertical, 7)
-                        .glassCapsule(tint: selected ? Color.accentColor : nil)
+                        .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                        .background(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.fill.tertiary), in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    // An empty filter is still choosable, just quieter
+                    .opacity(number == 0 && !selected ? 0.5 : 1)
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
