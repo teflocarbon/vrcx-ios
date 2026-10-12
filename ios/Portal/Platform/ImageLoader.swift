@@ -28,6 +28,14 @@ final class ImageLoader: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Read under the lock from a plain function: locks can't be held across
+    /// an await
+    private var currentAPI: VRChatAPI? {
+        lock.lock()
+        defer { lock.unlock() }
+        return api
+    }
+
     func cached(_ url: String) -> UIImage? {
         memory.object(forKey: url as NSString)
     }
@@ -42,10 +50,7 @@ final class ImageLoader: @unchecked Sendable {
         guard let url = URL(string: string), url.scheme == "https" || url.scheme == "http" else { return nil }
         var request = URLRequest(url: url)
         request.setValue(VRChatAPI.userAgent, forHTTPHeaderField: "User-Agent")
-        lock.lock()
-        let api = self.api
-        lock.unlock()
-        if let api, url.host() == api.connection.apiBase.host(), let cookie = api.cookies.header {
+        if let api = currentAPI, url.host() == api.connection.apiBase.host(), let cookie = api.cookies.header {
             request.setValue(cookie, forHTTPHeaderField: "Cookie")
         }
         guard let result = try? await session.data(for: request),
