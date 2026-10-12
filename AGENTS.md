@@ -39,6 +39,10 @@ Everything that lands here is public and effectively permanent: code, fixtures, 
 - Commit subjects read `Area: what changed, in plain words`, with a body explaining the problem and the fix in prose.
 - The project is AGPL-3.0 (LICENSE). Ideas and approaches from other projects are fine; code copied or closely followed from one needs a compatible licence (MIT, Apache-2.0, BSD, GPL-3.0, AGPL-3.0) and a credit in NOTICE. VRCX (MIT) is credited there for the rules Portal follows from it.
 
+## Versions
+
+`MARKETING_VERSION` in `ios/project.yml` goes up as work lands, so a build number never stands alone: the minor version for a set of features (0.6.0), the patch for fixes and polish (0.6.1). Bump it in the commit that finishes the work, before triggering the IPA build. CI sets the build number from the run number and the commit from the SHA; Portal shows all three in You → About.
+
 ## Checks
 
 There's no Swift compiler outside macOS. Swift is proven by building on the owner's Mac (`cd ios && xcodegen generate && xcodebuild …`, or `tools/screenshots.sh`) or by `.github/workflows/ipa.yml`, which is manual: trigger it after pushing, read the log for `error:` if it fails, and fix it without waiting to be asked.
