@@ -21,13 +21,7 @@ struct NotificationsView: View {
                     }
                 }
             case .needsRelay:
-                Section {
-                    ContentUnavailableView(
-                        "Needs a Relay",
-                        systemImage: "bell.slash",
-                        description: Text("Push notifications come from a VRCX relay, which stays connected while Portal is closed. Signed in to VRChat directly, Portal can only show what arrives while it's open.")
-                    )
-                }
+                BackgroundCheckSection()
             case .relayNotSetUp:
                 Section {
                     ContentUnavailableView(
@@ -201,5 +195,31 @@ private struct OnlineFriendsPicker: View {
         .searchable(text: $search, prompt: "Find a Friend")
         .navigationTitle("Friends Coming Online")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Signed in to VRChat directly there's no relay to push, so the best iOS
+/// offers is a check now and then. Said plainly, so nobody expects live.
+private struct BackgroundCheckSection: View {
+    @Environment(PushStore.self) private var push
+    @State private var on = BackgroundCheck.isOn
+
+    var body: some View {
+        Section {
+            Toggle("Check for Invites in the Background", isOn: $on)
+                .onChange(of: on) { _, value in
+                    BackgroundCheck.isOn = value
+                    if value { Task { await push.turnOnLocal() } }
+                }
+        } header: {
+            Text("Without a Relay")
+        } footer: {
+            Text("iOS wakes Portal now and then to look for invites, invite requests and friend requests, and Portal tells you about new ones. iOS decides when: often a few times an hour, less on low battery, and never after you swipe Portal away. For notifications the moment something happens, connect to a VRCX relay.")
+        }
+        if push.permission == .denied && on {
+            Section {
+                ErrorRow(message: "Notifications are off for Portal in Settings, so these can't show.")
+            }
+        }
     }
 }

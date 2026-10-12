@@ -56,7 +56,7 @@ struct YouView: View {
                         NotificationsView()
                     } label: {
                         LabeledContent {
-                            Text(push.isOn ? "On" : "Off")
+                            Text(push.isOn ? "On" : BackgroundCheck.isOn ? "Background Checks" : "Off")
                         } label: {
                             IconText(symbol: "bell.badge", text: "Notifications")
                         }

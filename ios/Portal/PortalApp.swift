@@ -89,6 +89,7 @@ struct PortalApp: App {
                         Task { await inbox.refreshIfStale() }
                     case .background:
                         session.stopLive()
+                        BackgroundCheck.schedule()
                     default:
                         break
                     }

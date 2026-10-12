@@ -66,6 +66,8 @@ final class InboxStore {
                 URLQueryItem(name: "n", value: "100"),
             ])) ?? []
             items = v1.map { InboxItem(source: .v1($0)) } + v2.map { InboxItem(source: .v2($0)) }
+            // Seen here, so a background check won't announce them again
+            BackgroundCheck.remember(v1.map(\.id))
             loadedAt = Date()
             error = nil
         } catch {

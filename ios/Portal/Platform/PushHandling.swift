@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         center.setNotificationCategories(NotificationActions.categories)
+        BackgroundCheck.register()
         return true
     }
 
@@ -126,7 +127,7 @@ enum NotificationActions {
 
         // A button: do it with the saved session, and only speak up if it
         // didn't work (success is quiet, as with Apple's own)
-        guard let api = await savedAPI() else {
+        guard let api = await SavedSession.api() else {
             Notifier.post(title: "Couldn't do that", body: "Open Portal and sign in again.")
             return
         }
@@ -158,13 +159,5 @@ enum NotificationActions {
         } catch {
             Notifier.post(title: "Couldn't do that", body: error.userMessage)
         }
-    }
-
-    /// The saved session, for when iOS wakes Portal just for a button
-    @MainActor private static func savedAPI() -> VRChatAPI? {
-        guard let data = UserDefaults.standard.data(forKey: "connection"),
-              let connection = try? JSONDecoder().decode(Connection.self, from: data) else { return nil }
-        let api = VRChatAPI(connection: connection)
-        return api.cookies.isEmpty ? nil : api
     }
 }

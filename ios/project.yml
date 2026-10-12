@@ -43,6 +43,13 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         PortalCommit: $(PORTAL_COMMIT)
         UILaunchScreen: {}
+        # Background checks for invites when signed in to VRChat directly,
+        # with no relay to push (Platform/BackgroundCheck.swift). Re-signing
+        # remaps the bundle ID here as everywhere else in Info.plist.
+        UIBackgroundModes:
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - $(PRODUCT_BUNDLE_IDENTIFIER).refresh
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

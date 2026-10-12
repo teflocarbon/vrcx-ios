@@ -119,6 +119,13 @@ final class PushStore {
         }
     }
 
+    /// Permission for Portal's own notifications, with no relay involved
+    func turnOnLocal() async {
+        let center = UNUserNotificationCenter.current()
+        _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+        permission = await center.notificationSettings().authorizationStatus
+    }
+
     /// iOS gave us a token: tell the relay where to send pushes
     func received(token data: Data) async {
         let token = data.map { String(format: "%02x", $0) }.joined()
