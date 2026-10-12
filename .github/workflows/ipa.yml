@@ -1,0 +1,75 @@
+name: iOS IPA
+
+# Manual: an unsigned Release Portal.ipa, to sign with your own account
+# (macOS runners cost 10x the minutes of Linux ones)
+on:
+  workflow_dispatch:
+
+# To publish the IPA on the rolling "latest" release
+permissions:
+  contents: write
+
+# One build at a time, and a newer one replaces an older one still queued
+# or running: they all publish to the same release, so only the newest
+# matters (and macOS runners are generous to public repos; be nice)
+concurrency:
+  group: ipa
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # History and tags, for the release notes since the last build
+          fetch-depth: 0
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: cd ios && xcodegen generate
+      - name: Build for device (unsigned)
+        run: |
+          xcodebuild -project ios/Portal.xcodeproj -scheme Portal \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PORTAL_COMMIT="${GITHUB_SHA::7}" build
+      - name: Package the IPA
+        run: |
+          mkdir -p ipa/Payload
+          cp -R build/Build/Products/Release-iphoneos/Portal.app ipa/Payload/
+          # Ad-hoc signed, so a signer sees a well-formed bundle
+          codesign --force --sign - ipa/Payload/Portal.app
+          (cd ipa && zip -qry ../Portal.ipa Payload)
+          ls -l Portal.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Portal-ipa
+          path: Portal.ipa
+          if-no-files-found: error
+      # Portal's own source: add it to WarpSign, AltStore or SideStore
+      - name: Write the source
+        run: |
+          # The changes since the last build (commit subjects, already public)
+          if git rev-parse -q --verify refs/tags/latest >/dev/null; then
+            git log --no-merges --format='%s' latest..HEAD | head -40 > notes.txt
+          fi
+          [ -s notes.txt ] || git log -1 --format='%s' > notes.txt
+          python3 tools/portal_source.py Portal.ipa notes.txt source.json
+      # A plain .ipa link Safari saves straight to Files: iOS can't always
+      # unzip artifact downloads ("Bad message")
+      - name: Publish to the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Build $GITHUB_RUN_NUMBER: unsigned Portal.ipa from $GITHUB_SHA. Add https://github.com/$GITHUB_REPOSITORY/releases/download/latest/source.json as a source to stay up to date. Portal shows its build in You → About."
+          # The release's tag follows the commit it was built from
+          git tag -f latest "$GITHUB_SHA"
+          git push -f origin refs/tags/latest
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest Portal.ipa source.json --clobber
+            gh release edit latest --notes "$notes"
+          else
+            gh release create latest Portal.ipa source.json --prerelease \
+              --title "Portal (latest build)" --notes "$notes" --target "$GITHUB_SHA"
+          fi

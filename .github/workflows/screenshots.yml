@@ -1,0 +1,27 @@
+name: Screenshots
+
+# Manual: screenshots of every main screen in the iOS simulator, in demo
+# mode (sample people and worlds, never a real account)
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: screenshots
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install XcodeGen and Pillow
+        run: |
+          brew install xcodegen
+          python3 -m pip install --break-system-packages Pillow || python3 -m pip install Pillow
+      - name: Take screenshots
+        run: tools/screenshots.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots/
+          if-no-files-found: error

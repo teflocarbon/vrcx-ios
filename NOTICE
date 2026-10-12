@@ -1,0 +1,7 @@
+Portal (vrcx-ios)
+Copyright (C) 2026 teflocarbon
+Licensed under the GNU Affero General Public License v3.0; see LICENSE.
+
+Parts of the app (build info, Keychain, network log, demo mode, CI and the
+AltStore source writer) come from WarpSign (warpsign-neo), by the same
+author.

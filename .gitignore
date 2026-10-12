@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+/screenshots/
+/build/
+
+# Public repo: never commit secrets or personal data (see AGENTS.md).
+# A safety net, not a check: read `git diff --cached` before committing.
+*.p8
+*.p12
+*.mobileprovision
+*.ipa
+*.har
+*cookie*
+*network-log*
+*pipeline-log*
