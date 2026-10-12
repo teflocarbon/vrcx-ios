@@ -361,7 +361,7 @@ final class FeedStore {
             case "feed_gps":
                 var entry = item(.location)
                 entry.location = data.location
-                entry.worldName = data.worldName
+                entry.worldName = data.worldName.flatMap { $0.isEmpty ? nil : $0 }
                 entry.previous = data.previousLocation
                 entry.groupName = data.groupName.flatMap { $0.isEmpty ? nil : $0 }
                 entry.duration = data.time.map { $0 / 1_000 }
@@ -369,7 +369,7 @@ final class FeedStore {
             case "feed_online_offline":
                 var entry = item(data.type == "Offline" ? .offline : .online)
                 entry.location = data.location
-                entry.worldName = data.worldName
+                entry.worldName = data.worldName.flatMap { $0.isEmpty ? nil : $0 }
                 entry.groupName = data.groupName.flatMap { $0.isEmpty ? nil : $0 }
                 entry.duration = data.time.map { $0 / 1_000 }
                 result.append(entry)
@@ -393,7 +393,7 @@ final class FeedStore {
                 result.append(entry)
             case "feed_avatar":
                 var entry = item(.avatar)
-                entry.avatarName = data.avatarName
+                entry.avatarName = data.avatarName.flatMap { $0.isEmpty ? nil : $0 }
                 entry.avatarImage = data.currentAvatarThumbnailImageUrl.map { Self.throughRelay($0, origin: origin) }
                 result.append(entry)
             default:

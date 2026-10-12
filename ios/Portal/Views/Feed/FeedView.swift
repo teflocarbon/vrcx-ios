@@ -21,6 +21,22 @@ struct FeedView: View {
 
                 ConnectionBanner()
 
+                if feed.favouritesOnly {
+                    Section {
+                        HStack {
+                            Label("Showing favourites only", systemImage: "star.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Show Everyone") {
+                                withAnimation { feed.favouritesOnly = false }
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+
                 let items = feed.filtered(filter, favourites: friends.favouriteIds, search: search)
                 ForEach(days(items), id: \.day) { group in
                     Section(group.title) {
@@ -79,7 +95,8 @@ struct FeedView: View {
                             Label("Favourites Only", systemImage: "star")
                         }
                     } label: {
-                        Label("Options", systemImage: "line.3.horizontal.decrease")
+                        // Filled while a filter is on, so it never hides rows unnoticed
+                        Label("Options", systemImage: feed.favouritesOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
                     }
                 }
             }
@@ -185,7 +202,9 @@ struct FeedRow: View {
     private var description: String {
         switch item.kind {
         case .online:
-            return item.location.map { _ in "Came online in \(worldName)" } ?? "Came online"
+            if place.isTraveling { return "Came online, on the way somewhere" }
+            if place.isInstance || place.isPrivate { return "Came online in \(worldName)" }
+            return "Came online"
         case .offline:
             return "Went offline"
         case .location:
