@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// One event from VRChat's pipeline: `{"type": "friend-online", "content":
 /// "<json>"}`. The content is JSON inside a string; `content` holds it
@@ -67,6 +68,11 @@ final class Pipeline {
     private var loop: Task<Void, Never>?
     private var failures = 0
     private let session = URLSession(configuration: .ephemeral)
+    /// Wi-Fi to cellular and back can leave a socket dead without an error:
+    /// a change of network means reconnecting at once
+    private let monitor = NWPathMonitor()
+    private var lastPath: String?
+    private var networkChanged = false
 
     /// The last few events, for the Developer page
     private(set) var recent: [PipelineEvent] = []
@@ -77,12 +83,15 @@ final class Pipeline {
 
     func start() {
         guard loop == nil else { return }
+        startMonitor()
         loop = Task { [weak self] in
             await self?.run()
         }
     }
 
     func stop() {
+        // A stopped pipeline is thrown away, and a monitor can't restart
+        monitor.cancel()
         loop?.cancel()
         loop = nil
         task?.cancel(with: .goingAway, reason: nil)
@@ -107,7 +116,8 @@ final class Pipeline {
             failures += 1
             // The relay closes with 1012 when its own upstream reconnects:
             // come straight back
-            let delay = closeCode == .restart ? 1 : backoff(failures)
+            let delay = closeCode == .restart || networkChanged ? 1 : backoff(failures)
+            networkChanged = false
             state = .waiting(retryAt: Date().addingTimeInterval(delay))
             try? await Task.sleep(for: .seconds(delay))
         }
@@ -146,9 +156,7 @@ final class Pipeline {
         socket.resume()
 
         // The pipeline can be quiet for minutes: a ping answered means it's open
-        let open = await withCheckedContinuation { continuation in
-            socket.sendPing { error in continuation.resume(returning: error == nil) }
-        }
+        let open = await Self.ping(socket, within: 15)
         guard open, !Task.isCancelled else {
             socket.cancel(with: .goingAway, reason: nil)
             if task === socket { task = nil }
@@ -156,6 +164,20 @@ final class Pipeline {
         }
         state = .connected
         if refresh { onNeedsRefresh?() }
+
+        // A socket can die without saying so: ping now and then, and close
+        // it if there's no answer, so the loop reconnects
+        let watchdog = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                if Task.isCancelled { return }
+                if await !Self.ping(socket, within: 10) {
+                    socket.cancel(with: .goingAway, reason: nil)
+                    return
+                }
+            }
+        }
+        defer { watchdog.cancel() }
 
         while !Task.isCancelled {
             do {
@@ -184,5 +206,47 @@ final class Pipeline {
     private func remember(_ event: PipelineEvent) {
         recent.append(event)
         if recent.count > 100 { recent.removeFirst(recent.count - 100) }
+    }
+
+    /// Whether the socket answers a ping in time. A dead socket may never
+    /// answer, so give up after `seconds` and close it, which makes the
+    /// unanswered ping finish too.
+    private nonisolated static func ping(_ socket: URLSessionWebSocketTask, within seconds: Double) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await withCheckedContinuation { continuation in
+                    socket.sendPing { error in continuation.resume(returning: error == nil) }
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(seconds))
+                return false
+            }
+            let answered = await group.next() ?? false
+            if !answered { socket.cancel(with: .goingAway, reason: nil) }
+            group.cancelAll()
+            return answered
+        }
+    }
+
+    /// Reconnect straight away when the network changes under an open
+    /// socket (Wi-Fi to cellular, a VPN like Tailscale coming up)
+    private func startMonitor() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            let description = "\(path.status) \(path.availableInterfaces.map(\.name))"
+            Task { @MainActor in self?.pathChanged(to: description, satisfied: path.status == .satisfied) }
+        }
+        if monitor.queue == nil {
+            monitor.start(queue: DispatchQueue(label: "Portal.network"))
+        }
+    }
+
+    private func pathChanged(to description: String, satisfied: Bool) {
+        defer { lastPath = description }
+        guard let lastPath, lastPath != description, satisfied else { return }
+        if state == .connected || state == .connecting {
+            networkChanged = true
+            task?.cancel(with: .goingAway, reason: nil)
+        }
     }
 }

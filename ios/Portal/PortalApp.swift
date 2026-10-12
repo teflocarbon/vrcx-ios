@@ -87,6 +87,8 @@ struct PortalApp: App {
                         session.startLive()
                         Task { await friends.refreshIfStale() }
                         Task { await inbox.refreshIfStale() }
+                        // Catches the feed up from where it got to, however long it's been
+                        Task { await feed.refresh() }
                     case .background:
                         session.stopLive()
                         BackgroundCheck.schedule()

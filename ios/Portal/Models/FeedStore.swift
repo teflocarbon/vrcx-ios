@@ -77,19 +77,28 @@ final class FeedStore {
     }
 
     @ObservationIgnored private weak var session: SessionStore?
+    /// Where Portal has read up to in the relay's feed, and the oldest row
+    /// it has. Each phone keeps its own; the relay's backfill is for VRCX.
+    /// Saved in the same write as the rows, so neither runs ahead.
+    @ObservationIgnored private var cursor: Int?
     @ObservationIgnored private var oldest: Int?
+    @ObservationIgnored private var epoch: String?
     @ObservationIgnored private var save: Task<Void, Never>?
     @ObservationIgnored private var nudge: Task<Void, Never>?
     @ObservationIgnored private var lateNudge: Task<Void, Never>?
     private let isDemo: Bool
 
     private static let keep: TimeInterval = 7 * 86_400
-    private static let cursorKey = "feedCursor"
 
     init() {
         isDemo = false
         favouritesOnly = UserDefaults.standard.bool(forKey: "feedFavouritesOnly")
-        items = Self.load()
+        let saved = Self.load()
+        items = saved.items
+        cursor = saved.cursor
+        oldest = saved.oldest
+        epoch = saved.epoch
+        hasMore = saved.hasMore ?? false
     }
 
     init(demoItems: [FeedItem]) {
@@ -106,6 +115,8 @@ final class FeedStore {
             oldest = nil
             relayFeed = false
             cursor = nil
+            epoch = nil
+            hasMore = false
             persist()
         }
     }
@@ -141,13 +152,6 @@ final class FeedStore {
 
     // MARK: The relay's feed
 
-    /// Where Portal has read up to in the relay's feed, kept between
-    /// launches. Each phone keeps its own; the relay's backfill is for VRCX.
-    private var cursor: Int? {
-        get { UserDefaults.standard.object(forKey: Self.cursorKey) as? Int }
-        set { UserDefaults.standard.set(newValue, forKey: Self.cursorKey) }
-    }
-
     /// A friend did something: the relay will have a row for it shortly.
     /// Going offline takes 170 seconds to count, so look again after that.
     func nudge(offline: Bool) {
@@ -168,8 +172,9 @@ final class FeedStore {
         }
     }
 
-    /// Catch up: everything after the last row Portal has, or the newest
-    /// page the first time
+    /// Catch up: everything after the last row Portal has. Asking twice is
+    /// harmless (rows have their own IDs), and the place moves on only with
+    /// the rows it covers, so a fetch iOS cuts short just happens again.
     func refresh() async {
         guard !isDemo, let session, let api = session.api, case .relay(let origin)? = session.connection else { return }
         guard !isLoading else { return }
@@ -184,29 +189,10 @@ final class FeedStore {
         }
         guard relayFeed else { return }
         do {
-            if let cursor, items.contains(where: \.fromRelay) {
-                var after = cursor
-                // A few pages at most: after a long time away, the newest
-                // page and paging back is quicker than reading every row
-                for _ in 0..<5 {
-                    let page = try await fetch(api, origin: origin, after: after)
-                    let rows = convert(page.rows, origin: origin)
-                    let known = Set(items.map(\.id))
-                    items.insert(contentsOf: rows.reversed().filter { !known.contains($0.id) }, at: 0)
-                    after = page.next ?? after
-                    if page.rows.count < 500 { break }
-                }
-                self.cursor = after
+            if let cursor, items.contains(where: \.fromRelay), try await catchUp(api, origin: origin, from: cursor) {
+                // Caught up
             } else {
-                let page = try await fetch(api, origin: origin, before: Int(Int32.max))
-                items = convert(page.rows, origin: origin)
-                cursor = page.rows.first?.seq ?? cursor
-                oldest = page.rows.last?.seq
-                hasMore = page.next != nil
-            }
-            if oldest == nil {
-                oldest = items.compactMap { Int($0.id.dropFirst().prefix { $0.isNumber }) }.min()
-                hasMore = oldest != nil
+                try await loadNewest(api, origin: origin)
             }
             error = nil
             trim()
@@ -214,6 +200,38 @@ final class FeedStore {
         } catch {
             self.error = error.userMessage
         }
+    }
+
+    /// Everything after `cursor`, a few pages at most. Returns false when
+    /// that isn't enough (a long time away) or the relay's numbering has
+    /// started again: then the newest page is the place to start, so Load
+    /// Earlier walks back with no hole in the middle.
+    private func catchUp(_ api: VRChatAPI, origin: URL, from cursor: Int) async throws -> Bool {
+        var after = cursor
+        var fresh: [FeedItem] = []
+        for _ in 0..<5 {
+            let page = try await fetch(api, origin: origin, after: after)
+            if let epoch = page.epoch, let known = self.epoch, epoch != known { return false }
+            fresh += convert(page.rows, origin: origin)
+            after = page.next ?? after
+            if page.rows.count < 500 {
+                let known = Set(items.map(\.id))
+                items.insert(contentsOf: fresh.reversed().filter { !known.contains($0.id) }, at: 0)
+                self.cursor = after
+                if self.epoch == nil { self.epoch = page.epoch }
+                return true
+            }
+        }
+        return false
+    }
+
+    private func loadNewest(_ api: VRChatAPI, origin: URL) async throws {
+        let page = try await fetch(api, origin: origin, before: Int(Int32.max))
+        items = items.filter { !$0.fromRelay } + convert(page.rows, origin: origin)
+        cursor = page.rows.first?.seq ?? 0
+        oldest = page.rows.last?.seq
+        hasMore = page.next != nil
+        epoch = page.epoch
     }
 
     /// The page before the oldest row shown
@@ -228,6 +246,7 @@ final class FeedStore {
             items += convert(page.rows, origin: origin).filter { !known.contains($0.id) }
             self.oldest = page.rows.last?.seq ?? oldest
             hasMore = page.next != nil && !page.rows.isEmpty
+            persist()
         } catch {
             self.error = error.userMessage
         }
@@ -236,6 +255,8 @@ final class FeedStore {
     private struct Page: Decodable {
         let rows: [Row]
         let next: Int?
+        /// Changes if the relay's feed starts again from scratch
+        var epoch: String?
     }
 
     /// One row of VRCX's feed tables, with VRCX's own column names
@@ -388,11 +409,21 @@ final class FeedStore {
         return folder.appending(path: "feed.json")
     }
 
-    private static func load() -> [FeedItem] {
+    /// The rows and Portal's place in the relay's feed, saved together
+    private struct Saved: Codable {
+        var items: [FeedItem]
+        var cursor: Int?
+        var oldest: Int?
+        var hasMore: Bool?
+        var epoch: String?
+    }
+
+    private static func load() -> Saved {
         guard let data = try? Data(contentsOf: url),
-              let items = try? JSONDecoder().decode([FeedItem].self, from: data) else { return [] }
+              var saved = try? JSONDecoder().decode(Saved.self, from: data) else { return Saved(items: []) }
         let cutoff = Date().addingTimeInterval(-keep)
-        return items.filter { $0.date >= cutoff }
+        saved.items = saved.items.filter { $0.fromRelay || $0.date >= cutoff }
+        return saved
     }
 
     /// Saved a moment later, so a burst of changes is one write. It stays on
@@ -400,7 +431,7 @@ final class FeedStore {
     private func persist() {
         guard !isDemo else { return }
         save?.cancel()
-        let snapshot = items
+        let snapshot = Saved(items: items, cursor: cursor, oldest: oldest, hasMore: hasMore, epoch: epoch)
         let url = Self.url
         save = Task.detached(priority: .utility) {
             try? await Task.sleep(for: .seconds(2))
