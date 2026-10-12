@@ -16,10 +16,6 @@ struct YouView: View {
                             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
-                        StatusRail(me: me)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
                     }
                     StatusMessageSection(me: me)
                     if let location = me.location {
@@ -119,22 +115,26 @@ private struct ProfileHeader: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            AvatarView(id: me.id, name: me.displayName ?? "You", url: me.asUser.largeImageURL, size: 76)
+            AvatarView(id: me.id, name: me.displayName ?? "You", url: me.asUser.largeImageURL, size: 84)
             VStack(alignment: .leading, spacing: 4) {
                 Text(me.displayName ?? "You")
                     .font(.title2.weight(.bold))
+                    .lineLimit(1)
                 let trust = TrustRank(tags: me.tags)
                 Text(trust.name)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(trust.color)
+                StatusPill(me: me)
+                    .padding(.top, 4)
             }
             Spacer(minLength: 0)
         }
     }
 }
 
-/// The wrist's four-way status rail, as glass capsules
-private struct StatusRail: View {
+/// Your status as a small glass pill under your name: tap for the four,
+/// each with its colour, like the Focus picker
+private struct StatusPill: View {
     let me: CurrentUser
     @Environment(SessionStore.self) private var session
     @Environment(Actions.self) private var actions
@@ -142,43 +142,54 @@ private struct StatusRail: View {
 
     var body: some View {
         let current = UserStatus(me.status)
-        HStack(spacing: 8) {
-            ForEach(UserStatus.choosable, id: \.self) { status in
-                let selected = status == current
-                Button {
-                    guard !selected else { return }
-                    Task { await set(status) }
-                } label: {
-                    VStack(spacing: 5) {
-                        if setting == status {
-                            ProgressView().controlSize(.small).frame(height: 10)
-                        } else {
-                            StatusDot(status: status, size: 10)
-                        }
+        Menu {
+            Picker("Status", selection: Binding(
+                get: { setting ?? current },
+                set: { status in Task { await set(status) } }
+            )) {
+                ForEach(UserStatus.choosable, id: \.self) { status in
+                    Label {
                         Text(status.label)
-                            .font(.caption.weight(selected ? .semibold : .regular))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                    } icon: {
+                        // Menus draw icons as templates: a pre-coloured
+                        // image keeps the status colour
+                        Image(uiImage: Self.dot(status))
                     }
-                    .foregroundStyle(selected ? Color.primary : Color.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .glassSurface(cornerRadius: 16, interactive: true)
-                    .overlay {
-                        if selected {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(status.color, lineWidth: 1.5)
-                        }
-                    }
+                    .tag(status)
                 }
-                .buttonStyle(.plain)
-                .disabled(setting != nil)
-                .accessibilityAddTraits(selected ? .isSelected : [])
             }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 6) {
+                if setting != nil {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    StatusDot(status: current, size: 9)
+                }
+                Text((setting ?? current).label)
+                    .font(.subheadline.weight(.semibold))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .glassCapsule()
         }
+        // Menus tint their label: only the dot should carry colour
+        .tint(.primary)
+        .disabled(setting != nil)
+        .accessibilityLabel("Status: \(current.label)")
+    }
+
+    private static func dot(_ status: UserStatus) -> UIImage {
+        let image = UIImage(systemName: "circle.fill") ?? UIImage()
+        return image.withTintColor(UIColor(status.color), renderingMode: .alwaysOriginal)
     }
 
     private func set(_ status: UserStatus) async {
+        guard status != UserStatus(me.status) else { return }
         setting = status
         defer { setting = nil }
         do {
