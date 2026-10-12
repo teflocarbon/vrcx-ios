@@ -194,6 +194,13 @@ final class FeedStore {
             } else {
                 try await loadNewest(api, origin: origin)
             }
+            // At the start of history, look again: the relay can import
+            // older VRCX history at any time, numbered below its own rows
+            // (zero and negative), so "nothing earlier" may have changed
+            if !hasMore, let oldest {
+                let probe = try await fetch(api, origin: origin, before: oldest, limit: 1)
+                hasMore = !probe.rows.isEmpty
+            }
             error = nil
             trim()
             persist()
@@ -327,8 +334,10 @@ final class FeedStore {
         }
     }
 
-    private func fetch(_ api: VRChatAPI, origin: URL, after: Int? = nil, before: Int? = nil) async throws -> Page {
-        var query = [URLQueryItem(name: "limit", value: after != nil ? "500" : "200")]
+    /// Row numbers are signed: imported VRCX history counts down from 0
+    private func fetch(_ api: VRChatAPI, origin: URL, after: Int? = nil, before: Int? = nil,
+                       limit: Int? = nil) async throws -> Page {
+        var query = [URLQueryItem(name: "limit", value: String(limit ?? (after != nil ? 500 : 200)))]
         if let after { query.append(URLQueryItem(name: "after", value: String(after))) }
         if let before { query.append(URLQueryItem(name: "before", value: String(before))) }
         // /relay/v1 sits beside /api/1 on the relay's origin
