@@ -21,6 +21,8 @@ final class FriendsStore {
         didSet { UserDefaults.standard.set(showOfflineFavourites, forKey: "showOfflineFavourites") }
     }
 
+    /// Where changes go to become feed items
+    @ObservationIgnored var onFeed: ((FeedItem) -> Void)?
     @ObservationIgnored private var api: VRChatAPI?
     @ObservationIgnored private weak var session: SessionStore?
     @ObservationIgnored private var pendingOffline: [String: Task<Void, Never>] = [:]
@@ -187,6 +189,8 @@ final class FriendsStore {
         guard event.type.hasPrefix("friend-"), let content = event.decode(FriendEvent.self) else { return false }
         let id = content.userId
         let now = event.received
+        let old = friends[id]
+        let wasPendingOffline = pendingOffline[id] != nil
         switch event.type {
         case "friend-online":
             cancelPendingOffline(id)
@@ -224,8 +228,48 @@ final class FriendsStore {
         default:
             return false
         }
-        if let friend = friends[id] { requestWorld(friend.place.worldId) }
+        if let friend = friends[id] {
+            requestWorld(friend.place.worldId)
+            recordFeed(event.type, old: old, new: friend, wasPendingOffline: wasPendingOffline, at: now)
+        }
         return true
+    }
+
+    /// Turn a change into feed items, with VRCX's rules: coming back within
+    /// 170 seconds of going offline isn't news, and a move only counts when
+    /// Portal knew where they were before
+    private func recordFeed(_ type: String, old: Friend?, new: Friend, wasPendingOffline: Bool, at date: Date) {
+        guard let onFeed, let old else { return }
+        func item(_ kind: FeedItem.Kind, location: String? = nil, text: String? = nil, previous: String? = nil) {
+            onFeed(FeedItem(id: UUID().uuidString, date: date, userId: new.id, name: new.name, image: new.user.imageURL,
+                            kind: kind, location: location, worldName: worlds[Location(location).worldId]?.name,
+                            text: text, previous: previous))
+        }
+        switch type {
+        case "friend-online":
+            if !wasPendingOffline && old.state != .online {
+                item(.online, location: new.location)
+            } else if old.location != new.location && new.place.isInstance {
+                item(.location, location: new.location, previous: old.location)
+            }
+        case "friend-location":
+            guard new.location != "traveling", old.state == .online, old.location != new.location,
+                  old.location != "offline", !old.location.isEmpty else { return }
+            item(.location, location: new.location, previous: old.location)
+        case "friend-update":
+            if old.user.status != new.user.status, let status = new.user.status {
+                item(.status, text: UserStatus(status).label, previous: old.user.status.map { UserStatus($0).label })
+            }
+            if (old.user.statusDescription ?? "") != (new.user.statusDescription ?? "") {
+                item(.statusMessage, text: new.user.statusDescription ?? "", previous: old.user.statusDescription)
+            }
+            if old.user.currentAvatarThumbnailImageUrl != nil,
+               old.user.currentAvatarThumbnailImageUrl != new.user.currentAvatarThumbnailImageUrl {
+                item(.avatar)
+            }
+        default:
+            break
+        }
     }
 
     private func update(_ id: String, user: VRCUser?, _ change: (inout Friend) -> Void) {
@@ -254,6 +298,7 @@ final class FriendsStore {
             try? await Task.sleep(for: .seconds(Self.offlineDelay))
             guard !Task.isCancelled, let self else { return }
             self.pendingOffline[id] = nil
+            let wasOnline = self.friends[id].map { $0.state != .offline } ?? false
             self.update(id, user: nil) { friend in
                 friend.state = .offline
                 friend.stateSince = date
@@ -261,6 +306,10 @@ final class FriendsStore {
                 friend.travelingTo = nil
                 friend.locationSince = date
                 friend.platform = platform ?? friend.platform
+            }
+            if wasOnline, let friend = self.friends[id] {
+                self.onFeed?(FeedItem(id: UUID().uuidString, date: date, userId: id, name: friend.name,
+                                      image: friend.user.imageURL, kind: .offline))
             }
         }
     }

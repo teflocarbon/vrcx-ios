@@ -31,17 +31,26 @@ final class SessionStore {
     @ObservationIgnored private var pipeline: Pipeline?
     @ObservationIgnored private var pendingAPI: VRChatAPI?
     let friends: FriendsStore
+    let inbox: InboxStore
+    let feed: FeedStore
+    /// Something new arrived in the inbox while Portal is open
+    @ObservationIgnored var onArrival: ((InboxItem) -> Void)?
     private let isDemo: Bool
 
     private static let connectionKey = "connection"
 
-    init(friends: FriendsStore) {
+    init(friends: FriendsStore, inbox: InboxStore, feed: FeedStore) {
         self.friends = friends
+        self.inbox = inbox
+        self.feed = feed
+        friends.onFeed = { [weak feed] item in feed?.add(item) }
         isDemo = false
     }
 
-    init(demoMe: CurrentUser, friends: FriendsStore) {
+    init(demoMe: CurrentUser, friends: FriendsStore, inbox: InboxStore, feed: FeedStore) {
         self.friends = friends
+        self.inbox = inbox
+        self.feed = feed
         isDemo = true
         me = demoMe
         connection = .relay(URL(string: "https://relay.example.com")!)
@@ -72,6 +81,8 @@ final class SessionStore {
         self.api = api
         ImageLoader.shared.use(api)
         friends.attach(api: api, session: self)
+        inbox.attach(self)
+        feed.attach(self)
         // Signed in until VRChat says otherwise: offline at launch shouldn't
         // mean signing in again
         phase = .signedIn
@@ -185,8 +196,10 @@ final class SessionStore {
             UserDefaults.standard.set(data, forKey: Self.connectionKey)
         }
         friends.attach(api: api, session: self)
+        inbox.attach(self)
+        feed.attach(self)
         phase = .signedIn
-        Task { await friends.refresh() }
+        Task { await refresh() }
         startLive()
     }
 
@@ -215,6 +228,8 @@ final class SessionStore {
         me = nil
         relaySignedOut = false
         friends.attach(api: nil, session: self)
+        inbox.attach(self)
+        feed.attach(self)
         phase = .signedOut
     }
 
@@ -232,7 +247,10 @@ final class SessionStore {
     /// Reload you and your friends
     func refresh() async {
         guard !isDemo, api != nil else { return }
-        await friends.refresh()
+        async let people: Void = friends.refresh()
+        async let notices: Void = inbox.refresh()
+        async let history: Void = feed.refresh()
+        _ = await (people, notices, history)
     }
 
     /// Start the pipeline, while Portal is on screen
@@ -270,6 +288,7 @@ final class SessionStore {
     private func handle(_ event: PipelineEvent) {
         relaySignedOut = false
         if friends.apply(event) { return }
+        if inbox.apply(event, arrived: { [weak self] item in self?.onArrival?(item) }) { return }
         switch event.type {
         case "user-location":
             guard var me, let content = event.decode(SelfLocation.self) else { return }

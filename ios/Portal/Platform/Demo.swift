@@ -167,7 +167,67 @@ enum Demo {
         )
     }
 
-    @MainActor static func session(friends: FriendsStore) -> SessionStore {
-        SessionStore(demoMe: me, friends: friends)
+    @MainActor static func session(friends: FriendsStore, inbox: InboxStore, feed: FeedStore) -> SessionStore {
+        SessionStore(demoMe: me, friends: friends, inbox: inbox, feed: feed)
+    }
+
+    private static func ago(_ minutes: Double) -> String {
+        ISO8601DateFormatter().string(from: Date().addingTimeInterval(-minutes * 60))
+    }
+
+    @MainActor static func inbox() -> InboxStore {
+        func notification(_ n: Int, _ type: String, from person: Int, minutes: Double, seen: Bool = false,
+                          details: String? = nil) -> InboxItem {
+            var json: [String: Any] = [
+                "id": String(format: "not_00000000-0000-0000-0000-%012ld", n),
+                "type": type,
+                "senderUserId": userId(person),
+                "senderUsername": people[person - 1].name,
+                "created_at": ago(minutes),
+                "seen": seen,
+                "message": "",
+            ]
+            if let details { json["details"] = details }
+            let data = (try? JSONSerialization.data(withJSONObject: json)) ?? Data()
+            let decoded = (try? JSONDecoder().decode(VRCNotification.self, from: data))
+                ?? VRCNotification(id: "not_\(n)", type: type)
+            return InboxItem(source: .v1(decoded))
+        }
+        let invite = "{\"worldId\":\"\(instance(4, 11870))\",\"worldName\":\"Pixel Arcade\",\"inviteMessage\":\"come race us!\"}"
+        var group = VRCNotificationV2(id: "not_00000000-0000-0000-0000-000000000009", type: "group.announcement")
+        group.title = "Test Group posted an announcement"
+        group.message = "Movie night is on Saturday at 8. Bring snacks, and a friend if you like."
+        group.createdAt = ago(300)
+        group.seen = true
+        group.imageUrl = picture("popcorn.fill", 0xC2366B, 0xE0A040)
+        return InboxStore(demoItems: [
+            notification(1, "invite", from: 2, minutes: 3, details: invite),
+            notification(2, "requestInvite", from: 3, minutes: 18, details: "{\"requestMessage\":\"can I join?\"}"),
+            notification(3, "friendRequest", from: 11, minutes: 95, seen: true),
+            InboxItem(source: .v2(group)),
+        ])
+    }
+
+    @MainActor static func feed() -> FeedStore {
+        let now = Date()
+        func item(_ n: Int, _ kind: FeedItem.Kind, person: Int, minutes: Double, location: String? = nil,
+                  text: String? = nil, previous: String? = nil) -> FeedItem {
+            let who = people[person - 1]
+            return FeedItem(id: "demo\(n)", date: now.addingTimeInterval(-minutes * 60), userId: userId(person), name: who.name,
+                            image: picture(who.symbol, who.colors.0, who.colors.1), kind: kind, location: location,
+                            text: text, previous: previous)
+        }
+        return FeedStore(demoItems: [
+            item(1, .location, person: 5, minutes: 12, location: instance(1, 48213, "~hidden(\(userId(1)))")),
+            item(2, .online, person: 2, minutes: 23, location: instance(4, 11870)),
+            item(3, .statusMessage, person: 4, minutes: 41, text: "recording, back later"),
+            item(4, .status, person: 4, minutes: 41, text: "Busy", previous: "Online"),
+            item(5, .location, person: 6, minutes: 35, location: instance(5, 30311, "~friends(\(userId(6)))", region: "use")),
+            item(6, .offline, person: 10, minutes: 70),
+            item(7, .avatar, person: 1, minutes: 84),
+            item(8, .online, person: 1, minutes: 84, location: instance(1, 48213, "~hidden(\(userId(1)))")),
+            item(9, .offline, person: 12, minutes: 60 * 22),
+            item(10, .online, person: 3, minutes: 60 * 26, location: "private"),
+        ])
     }
 }
