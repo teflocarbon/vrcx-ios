@@ -94,6 +94,8 @@ struct RelayCapabilities: Decodable {
     struct Features: Decodable {
         let events: Bool
         let push: Bool
+        /// VRCX's feed, worked out by the relay (newer relays)
+        var feed: Bool?
     }
 
     struct Events: Decodable {

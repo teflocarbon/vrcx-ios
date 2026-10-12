@@ -158,7 +158,7 @@ struct RelaySignInView: View {
             } header: {
                 Text("Relay Login")
             } footer: {
-                Text("Make a login for this phone on your relay's admin page. It isn't your VRChat password.")
+                Text("Make a login just for this phone on your relay's admin page, not the one VRCX on your PC uses: the relay keeps track of what each login has seen, so sharing one leaves gaps in VRCX's history. It isn't your VRChat password.")
             }
 
             if let error {

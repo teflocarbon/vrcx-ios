@@ -90,11 +90,11 @@ struct FeedView: View {
     }
 
     private var footer: String {
-        if feed.historyAvailable {
+        if feed.relayFeed {
             return "Your relay records what happens while Portal is closed, so the feed fills in when you come back."
         }
         if session.connection?.isRelay == true {
-            return "When friends come online, move or change status while Portal is open, it shows here. A relay with history fills in what happens while Portal is closed."
+            return "When friends come online, move or change status while Portal is open, it shows here. A relay that keeps the feed fills in what happens while Portal is closed."
         }
         return "When friends come online, move or change status while Portal is open, it shows here. Connect to a VRCX relay to see what happens while Portal is closed."
     }
@@ -150,12 +150,28 @@ struct FeedRow: View {
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    if let detail {
+                        Text(detail)
+                            .font(.footnote)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(2)
+                    }
+                }
+                if item.kind == .avatar, let picture = item.avatarImage {
+                    Spacer(minLength: 0)
+                    RemoteImage(url: picture) {
+                        Color.gray.opacity(0.2)
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(.rect(cornerRadius: 10, style: .continuous))
                 }
             }
         }
         .tint(.primary)
         .onAppear {
-            if let location = item.location { friends.requestWorld(Location(location).worldId) }
+            for location in [item.location, item.previous].compactMap({ $0 }) {
+                friends.requestWorld(Location(location).worldId)
+            }
         }
     }
 
@@ -173,8 +189,10 @@ struct FeedRow: View {
         case .offline:
             return "Went offline"
         case .location:
-            let access = place.isInstance ? " · \(place.accessName)" : ""
-            return "Went to \(worldName)\(access)"
+            var parts = ["Went to \(worldName)"]
+            if place.isInstance { parts.append(place.accessName) }
+            if let group = item.groupName { parts.append(group) }
+            return parts.joined(separator: " · ")
         case .status:
             if let previous = item.previous { return "\(previous) → \(item.text ?? "")" }
             return "Now \(item.text ?? "")"
@@ -182,8 +200,37 @@ struct FeedRow: View {
             let text = item.text ?? ""
             return text.isEmpty ? "Cleared their status message" : "“\(text)”"
         case .avatar:
-            return "Changed avatar"
+            return item.avatarName.map { "Changed avatar to \($0)" } ?? "Changed avatar"
+        case .bio:
+            return "Updated their bio"
         }
+    }
+
+    /// A second line: how long they'd been somewhere, or the new bio
+    private var detail: String? {
+        switch item.kind {
+        case .location:
+            guard let seconds = item.duration, seconds >= 60 else { return nil }
+            let before = Location(item.previous)
+            if before.isInstance, let name = friends.worlds[before.worldId]?.name {
+                return "After \(Self.span(seconds)) in \(name)"
+            }
+            return "After \(Self.span(seconds)) where they were"
+        case .offline:
+            guard let seconds = item.duration, seconds >= 60 else { return nil }
+            return "Online for \(Self.span(seconds))"
+        case .bio:
+            return item.text
+        default:
+            return nil
+        }
+    }
+
+    /// "2h 5m", "12m"
+    static func span(_ seconds: TimeInterval) -> String {
+        let minutes = Int(seconds / 60)
+        if minutes < 60 { return "\(minutes)m" }
+        return "\(minutes / 60)h \(minutes % 60)m"
     }
 
     private var symbol: String {
@@ -194,6 +241,7 @@ struct FeedRow: View {
         case .status: "circle.lefthalf.filled"
         case .statusMessage: "text.bubble"
         case .avatar: "person.crop.square"
+        case .bio: "text.quote"
         }
     }
 
@@ -203,7 +251,7 @@ struct FeedRow: View {
         case .offline: .secondary
         case .location: .accentColor
         case .status: UserStatus.allCases.first { $0.label == item.text }?.color ?? .secondary
-        case .statusMessage, .avatar: .secondary
+        case .statusMessage, .avatar, .bio: .secondary
         }
     }
 }

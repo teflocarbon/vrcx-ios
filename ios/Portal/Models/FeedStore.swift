@@ -4,10 +4,10 @@ import Observation
 /// Something a friend did: came online, moved, changed status
 struct FeedItem: Codable, Identifiable, Hashable, Sendable {
     enum Kind: String, Codable, Sendable {
-        case online, offline, location, status, statusMessage, avatar
+        case online, offline, location, status, statusMessage, avatar, bio
     }
 
-    /// "e1042" for an event from the relay's history, otherwise random
+    /// "f812" for a row from the relay's feed, otherwise random
     let id: String
     let date: Date
     let userId: String
@@ -18,8 +18,14 @@ struct FeedItem: Codable, Identifiable, Hashable, Sendable {
     var worldName: String?
     var text: String?
     var previous: String?
+    var groupName: String?
+    /// For a move, how long they'd been where they were; for going
+    /// offline, how long they'd been online
+    var duration: TimeInterval?
+    var avatarName: String?
+    var avatarImage: String?
 
-    var fromHistory: Bool { id.hasPrefix("e") }
+    var fromRelay: Bool { id.hasPrefix("f") }
 }
 
 enum FeedFilter: String, CaseIterable, Identifiable, Sendable {
@@ -41,22 +47,27 @@ enum FeedFilter: String, CaseIterable, Identifiable, Sendable {
         case .all: true
         case .online: kind == .online || kind == .offline
         case .location: kind == .location
-        case .status: kind == .status || kind == .statusMessage || kind == .avatar
+        case .status: kind == .status || kind == .statusMessage || kind == .avatar || kind == .bio
         }
     }
 }
 
-/// What your friends have been doing. Built from the pipeline while Portal
-/// is open, with VRCX's rules (an offline that's undone within 170 seconds
-/// never shows; a move only shows when where they were is known). With a
-/// relay that records events, it also reads back what happened while
-/// Portal was closed.
+/// What your friends have been doing.
+///
+/// With a relay that keeps the feed, the relay works it out the way VRCX
+/// does (it runs VRCX's own rules) and Portal shows its rows, keeping its
+/// own place in them: on launch it asks only for what came after the last
+/// row it has, so the feed fills in what happened while Portal was closed.
+/// Otherwise Portal follows VRCX's rules itself, from the pipeline while
+/// it's open: an offline undone within 170 seconds isn't shown, and a move
+/// only counts when where they were is known.
 @MainActor
 @Observable
 final class FeedStore {
     private(set) var items: [FeedItem] = []
     private(set) var isLoading = false
-    private(set) var historyAvailable = false
+    /// The relay keeps the feed, including while Portal is closed
+    private(set) var relayFeed = false
     /// More history to page back through
     private(set) var hasMore = false
     var error: String?
@@ -66,12 +77,14 @@ final class FeedStore {
     }
 
     @ObservationIgnored private weak var session: SessionStore?
-    @ObservationIgnored private var oldestEvent: Int?
+    @ObservationIgnored private var oldest: Int?
     @ObservationIgnored private var save: Task<Void, Never>?
+    @ObservationIgnored private var nudge: Task<Void, Never>?
+    @ObservationIgnored private var lateNudge: Task<Void, Never>?
     private let isDemo: Bool
 
     private static let keep: TimeInterval = 7 * 86_400
-    private static let historyTypes = "friend-online,friend-offline,friend-location"
+    private static let cursorKey = "feedCursor"
 
     init() {
         isDemo = false
@@ -83,15 +96,16 @@ final class FeedStore {
         isDemo = true
         favouritesOnly = false
         items = demoItems
-        historyAvailable = true
+        relayFeed = true
     }
 
     func attach(_ session: SessionStore) {
         self.session = session
         if session.api == nil && !isDemo {
             items = []
-            oldestEvent = nil
-            historyAvailable = false
+            oldest = nil
+            relayFeed = false
+            cursor = nil
             persist()
         }
     }
@@ -105,10 +119,13 @@ final class FeedStore {
         }
     }
 
-    // MARK: Live
+    // MARK: Live, without a relay feed
 
+    /// A change Portal worked out itself from the pipeline. Ignored when the
+    /// relay keeps the feed: its rows are the record, and they'd only be
+    /// shown twice.
     func add(_ item: FeedItem) {
-        guard !isDemo else { return }
+        guard !isDemo, !relayFeed else { return }
         items.insert(item, at: 0)
         trim()
         persist()
@@ -117,109 +134,237 @@ final class FeedStore {
     private func trim() {
         let cutoff = Date().addingTimeInterval(-Self.keep)
         if items.count > 1_500 { items.removeLast(items.count - 1_500) }
-        items.removeAll { $0.date < cutoff && !$0.fromHistory }
+        // The relay keeps its own history for longer; only what Portal saw
+        // itself ages out here
+        items.removeAll { $0.date < cutoff && !$0.fromRelay }
     }
 
-    // MARK: History from the relay
+    // MARK: The relay's feed
 
-    /// The newest page of the relay's history, replacing what Portal saw
-    /// live up to then (the same events, now with their IDs)
+    /// Where Portal has read up to in the relay's feed, kept between
+    /// launches. Each phone keeps its own; the relay's backfill is for VRCX.
+    private var cursor: Int? {
+        get { UserDefaults.standard.object(forKey: Self.cursorKey) as? Int }
+        set { UserDefaults.standard.set(newValue, forKey: Self.cursorKey) }
+    }
+
+    /// A friend did something: the relay will have a row for it shortly.
+    /// Going offline takes 170 seconds to count, so look again after that.
+    func nudge(offline: Bool) {
+        guard relayFeed else { return }
+        nudge?.cancel()
+        nudge = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
+        if offline {
+            lateNudge?.cancel()
+            lateNudge = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(FriendsStore.offlineDelay + 5))
+                guard !Task.isCancelled else { return }
+                await self?.refresh()
+            }
+        }
+    }
+
+    /// Catch up: everything after the last row Portal has, or the newest
+    /// page the first time
     func refresh() async {
         guard !isDemo, let session, let api = session.api, case .relay(let origin)? = session.connection else { return }
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
-        if let capabilities = await RelayProbe.capabilities(origin) {
-            historyAvailable = capabilities.features.events
-        } else {
-            historyAvailable = false
+        let capabilities = await RelayProbe.capabilities(origin)
+        let available = capabilities?.features.feed ?? false
+        if available != relayFeed {
+            relayFeed = available
+            // Switching sources: what the other one made doesn't belong
+            items.removeAll { $0.fromRelay != available }
         }
-        guard historyAvailable else { return }
+        guard relayFeed else { return }
         do {
-            let page = try await fetch(api, before: Int(Int32.max))
-            let history = convert(page.events)
-            let newest = history.first?.date ?? .distantPast
-            let live = items.filter { !$0.fromHistory && $0.date > newest.addingTimeInterval(1) }
-            items = live + history
-            oldestEvent = page.events.last?.id
-            hasMore = page.next != nil
+            if let cursor, items.contains(where: \.fromRelay) {
+                var after = cursor
+                // A few pages at most: after a long time away, the newest
+                // page and paging back is quicker than reading every row
+                for _ in 0..<5 {
+                    let page = try await fetch(api, origin: origin, after: after)
+                    let rows = convert(page.rows, origin: origin)
+                    let known = Set(items.map(\.id))
+                    items.insert(contentsOf: rows.reversed().filter { !known.contains($0.id) }, at: 0)
+                    after = page.next ?? after
+                    if page.rows.count < 500 { break }
+                }
+                self.cursor = after
+            } else {
+                let page = try await fetch(api, origin: origin, before: Int(Int32.max))
+                items = convert(page.rows, origin: origin)
+                cursor = page.rows.first?.seq ?? cursor
+                oldest = page.rows.last?.seq
+                hasMore = page.next != nil
+            }
+            if oldest == nil {
+                oldest = items.compactMap { Int($0.id.dropFirst().prefix { $0.isNumber }) }.min()
+                hasMore = oldest != nil
+            }
             error = nil
+            trim()
             persist()
         } catch {
             self.error = error.userMessage
         }
     }
 
-    /// The page before the oldest one shown
+    /// The page before the oldest row shown
     func loadEarlier() async {
-        guard !isDemo, let api = session?.api, let oldestEvent, hasMore, !isLoading else { return }
+        guard !isDemo, relayFeed, let api = session?.api, case .relay(let origin)? = session?.connection,
+              let oldest, hasMore, !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
         do {
-            let page = try await fetch(api, before: oldestEvent)
+            let page = try await fetch(api, origin: origin, before: oldest)
             let known = Set(items.map(\.id))
-            items += convert(page.events).filter { !known.contains($0.id) }
-            self.oldestEvent = page.events.last?.id ?? oldestEvent
-            hasMore = page.next != nil && !page.events.isEmpty
+            items += convert(page.rows, origin: origin).filter { !known.contains($0.id) }
+            self.oldest = page.rows.last?.seq ?? oldest
+            hasMore = page.next != nil && !page.rows.isEmpty
         } catch {
             self.error = error.userMessage
         }
     }
 
     private struct Page: Decodable {
-        struct Event: Decodable {
-            let id: Int
-            let type: String
-            let receivedAt: String
-            let content: Content
-        }
-
-        struct Content: Decodable {
-            let userId: String?
-            var user: VRCUser?
-            var location: String?
-            var travelingToLocation: String?
-        }
-
-        let events: [Event]
+        let rows: [Row]
         let next: Int?
     }
 
-    private func fetch(_ api: VRChatAPI, before: Int) async throws -> Page {
-        // /relay/v1 sits beside /api/1 on the relay's origin
-        try await api.get("../../relay/v1/events", query: [
-            URLQueryItem(name: "before", value: String(before)),
-            URLQueryItem(name: "limit", value: "200"),
-            URLQueryItem(name: "types", value: Self.historyTypes),
-        ])
+    /// One row of VRCX's feed tables, with VRCX's own column names
+    private struct Row: Decodable {
+        let seq: Int
+        let table: String
+        let data: Columns
+
+        struct Columns: Decodable {
+            var createdAt: String?
+            var userId: String?
+            var displayName: String?
+            var location: String?
+            var worldName: String?
+            var previousLocation: String?
+            var groupName: String?
+            var type: String?
+            var time: Double?
+            var status: String?
+            var statusDescription: String?
+            var previousStatus: String?
+            var previousStatusDescription: String?
+            var bio: String?
+            var previousBio: String?
+            var avatarName: String?
+            var currentAvatarThumbnailImageUrl: String?
+
+            enum CodingKeys: String, CodingKey {
+                case createdAt = "created_at"
+                case userId = "user_id"
+                case displayName = "display_name"
+                case location
+                case worldName = "world_name"
+                case previousLocation = "previous_location"
+                case groupName = "group_name"
+                case type, time, status
+                case statusDescription = "status_description"
+                case previousStatus = "previous_status"
+                case previousStatusDescription = "previous_status_description"
+                case bio
+                case previousBio = "previous_bio"
+                case avatarName = "avatar_name"
+                case currentAvatarThumbnailImageUrl = "current_avatar_thumbnail_image_url"
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                createdAt = try? c.decode(String.self, forKey: .createdAt)
+                userId = try? c.decode(String.self, forKey: .userId)
+                displayName = try? c.decode(String.self, forKey: .displayName)
+                location = try? c.decode(String.self, forKey: .location)
+                worldName = try? c.decode(String.self, forKey: .worldName)
+                previousLocation = try? c.decode(String.self, forKey: .previousLocation)
+                groupName = try? c.decode(String.self, forKey: .groupName)
+                type = try? c.decode(String.self, forKey: .type)
+                // VRCX writes "" for an Online row's time
+                time = try? c.decode(Double.self, forKey: .time)
+                status = try? c.decode(String.self, forKey: .status)
+                statusDescription = try? c.decode(String.self, forKey: .statusDescription)
+                previousStatus = try? c.decode(String.self, forKey: .previousStatus)
+                previousStatusDescription = try? c.decode(String.self, forKey: .previousStatusDescription)
+                bio = try? c.decode(String.self, forKey: .bio)
+                previousBio = try? c.decode(String.self, forKey: .previousBio)
+                avatarName = try? c.decode(String.self, forKey: .avatarName)
+                currentAvatarThumbnailImageUrl = try? c.decode(String.self, forKey: .currentAvatarThumbnailImageUrl)
+            }
+        }
     }
 
-    /// Events, newest first, as feed items with VRCX's rules: an offline
-    /// followed by an online within 170 seconds is dropped, and moving into
-    /// "traveling" isn't a move
-    private func convert(_ events: [Page.Event]) -> [FeedItem] {
-        guard let friends = session?.friends else { return [] }
+    private func fetch(_ api: VRChatAPI, origin: URL, after: Int? = nil, before: Int? = nil) async throws -> Page {
+        var query = [URLQueryItem(name: "limit", value: after != nil ? "500" : "200")]
+        if let after { query.append(URLQueryItem(name: "after", value: String(after))) }
+        if let before { query.append(URLQueryItem(name: "before", value: String(before))) }
+        // /relay/v1 sits beside /api/1 on the relay's origin
+        return try await api.get("../../relay/v1/feed", query: query)
+    }
+
+    /// Rows, in the order given, as feed items. A status row can change the
+    /// status and the message at once, which is two items.
+    private func convert(_ rows: [Row], origin: URL) -> [FeedItem] {
+        let friends = session?.friends
         var result: [FeedItem] = []
-        // Newest first, so the online that undoes an offline comes before it
-        var cameBackAt: [String: Date] = [:]
-        for event in events {
-            guard let userId = event.content.userId, let date = Date(vrchat: event.receivedAt) else { continue }
-            let known = friends.friends[userId]
-            let name = event.content.user?.displayName ?? known?.name ?? "Unknown User"
-            let image = event.content.user?.imageURL ?? known?.user.imageURL
-            switch event.type {
-            case "friend-online":
-                cameBackAt[userId] = date
-                let location = event.content.location
-                result.append(FeedItem(id: "e\(event.id)", date: date, userId: userId, name: name, image: image, kind: .online,
-                                       location: location, worldName: worldName(location, friends)))
-            case "friend-offline":
-                if let back = cameBackAt[userId], back.timeIntervalSince(date) < FriendsStore.offlineDelay { continue }
-                result.append(FeedItem(id: "e\(event.id)", date: date, userId: userId, name: name, image: image, kind: .offline))
-            case "friend-location":
-                guard let location = event.content.location, location != "traveling" else { continue }
-                result.append(FeedItem(id: "e\(event.id)", date: date, userId: userId, name: name, image: image, kind: .location,
-                                       location: location, worldName: worldName(location, friends)))
+        for row in rows {
+            let data = row.data
+            guard let userId = data.userId, let date = Date(vrchat: data.createdAt) else { continue }
+            let name = data.displayName ?? friends?.friends[userId]?.name ?? "Unknown User"
+            let image = friends?.friends[userId]?.user.imageURL
+            func item(_ kind: FeedItem.Kind, _ suffix: String = "") -> FeedItem {
+                FeedItem(id: "f\(row.seq)\(suffix)", date: date, userId: userId, name: name, image: image, kind: kind)
+            }
+            switch row.table {
+            case "feed_gps":
+                var entry = item(.location)
+                entry.location = data.location
+                entry.worldName = data.worldName
+                entry.previous = data.previousLocation
+                entry.groupName = data.groupName.flatMap { $0.isEmpty ? nil : $0 }
+                entry.duration = data.time.map { $0 / 1_000 }
+                result.append(entry)
+            case "feed_online_offline":
+                var entry = item(data.type == "Offline" ? .offline : .online)
+                entry.location = data.location
+                entry.worldName = data.worldName
+                entry.groupName = data.groupName.flatMap { $0.isEmpty ? nil : $0 }
+                entry.duration = data.time.map { $0 / 1_000 }
+                result.append(entry)
+            case "feed_status":
+                if data.status != data.previousStatus, let status = data.status {
+                    var entry = item(.status, "s")
+                    entry.text = UserStatus(status).label
+                    entry.previous = data.previousStatus.map { UserStatus($0).label }
+                    result.append(entry)
+                }
+                if (data.statusDescription ?? "") != (data.previousStatusDescription ?? "") {
+                    var entry = item(.statusMessage, "m")
+                    entry.text = data.statusDescription ?? ""
+                    entry.previous = data.previousStatusDescription
+                    result.append(entry)
+                }
+            case "feed_bio":
+                var entry = item(.bio)
+                entry.text = data.bio
+                entry.previous = data.previousBio
+                result.append(entry)
+            case "feed_avatar":
+                var entry = item(.avatar)
+                entry.avatarName = data.avatarName
+                entry.avatarImage = data.currentAvatarThumbnailImageUrl.map { Self.throughRelay($0, origin: origin) }
+                result.append(entry)
             default:
                 continue
             }
@@ -227,11 +372,12 @@ final class FeedStore {
         return result
     }
 
-    private func worldName(_ location: String?, _ friends: FriendsStore) -> String? {
-        let place = Location(location)
-        guard place.isInstance else { return nil }
-        friends.requestWorld(place.worldId)
-        return friends.worlds[place.worldId]?.name
+    /// VRChat's own image links, sent the relay's way: its image route needs
+    /// no session
+    static func throughRelay(_ link: String, origin: URL) -> String {
+        let prefix = Connection.vrchatAPI.absoluteString
+        guard link.hasPrefix(prefix) else { return link }
+        return origin.appending(path: "api/1/").absoluteString + link.dropFirst(prefix.count)
     }
 
     // MARK: Saving
@@ -249,7 +395,7 @@ final class FeedStore {
         return items.filter { $0.date >= cutoff }
     }
 
-    /// Saved a moment later, so a burst of events is one write. It stays on
+    /// Saved a moment later, so a burst of changes is one write. It stays on
     /// this phone: it's other people's comings and goings.
     private func persist() {
         guard !isDemo else { return }

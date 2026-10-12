@@ -290,7 +290,11 @@ final class SessionStore {
 
     private func handle(_ event: PipelineEvent) {
         relaySignedOut = false
-        if friends.apply(event) { return }
+        if friends.apply(event) {
+            // With a relay feed, the relay will have a row for it shortly
+            feed.nudge(offline: event.type == "friend-offline")
+            return
+        }
         if inbox.apply(event, arrived: { [weak self] item in self?.onArrival?(item) }) { return }
         switch event.type {
         case "user-location":

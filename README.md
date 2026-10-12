@@ -6,6 +6,8 @@ Portal connects either to your own self-hosted VRCX relay, which holds your VRCh
 
 Portal isn't made or endorsed by VRChat or the VRCX team.
 
+With a relay, give Portal a login of its own from the relay's admin page, one per device, never the one VRCX on your PC uses. The relay tracks what each login has seen live, so a shared login leaves gaps in VRCX's history.
+
 ## Install
 
 Portal is published unsigned. Sign it with your own Apple developer account.
