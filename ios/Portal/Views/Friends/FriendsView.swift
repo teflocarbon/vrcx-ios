@@ -89,8 +89,9 @@ struct FriendsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        FavouritesGroupPicker()
                         Toggle(isOn: Bindable(store).showOfflineFavourites) {
-                            Label("Show Offline Favourites", systemImage: "star")
+                            Label("Show Offline Favourites", systemImage: "moon.zzz")
                         }
                     } label: {
                         Label("Options", systemImage: "line.3.horizontal.decrease")
@@ -161,5 +162,24 @@ extension Demo {
         case .world: [.world(worldId(1))]
         default: []
         }
+    }
+}
+
+/// Which favourite group sits at the top of Friends, as on the wrist: one
+/// you choose, or every favourite
+struct FavouritesGroupPicker: View {
+    @Environment(FriendsStore.self) private var store
+
+    var body: some View {
+        Picker(selection: Bindable(store).favouritesGroup) {
+            Label("All Favourites", systemImage: "star.fill").tag(String?.none)
+            ForEach(store.favouriteGroupList) { group in
+                Label(group.displayName ?? group.name, systemImage: "star")
+                    .tag(Optional(group.name))
+            }
+        } label: {
+            Label("Favourites at the Top", systemImage: "star")
+        }
+        .pickerStyle(.menu)
     }
 }

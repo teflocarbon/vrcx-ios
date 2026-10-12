@@ -162,8 +162,11 @@ enum Demo {
         }
         return FriendsStore(
             demoFriends: list,
-            favourites: [userId(1), userId(5), userId(10)],
-            groups: [userId(1): ["Close Friends"], userId(5): ["Close Friends"], userId(10): ["Group 2"]],
+            groups: [
+                VRCFavoriteGroup(id: "fvgrp_0", name: "group_0", displayName: "Close Friends"),
+                VRCFavoriteGroup(id: "fvgrp_1", name: "group_1", displayName: "Group 2"),
+            ],
+            members: ["group_0": [userId(1), userId(5), userId(10)], "group_1": [userId(2)]],
             worlds: worlds
         )
     }

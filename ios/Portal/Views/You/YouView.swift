@@ -64,11 +64,17 @@ struct YouView: View {
                 }
 
                 Section {
+                    Picker("Favourites at the Top", selection: Bindable(store).favouritesGroup) {
+                        Text("All Favourites").tag(String?.none)
+                        ForEach(store.favouriteGroupList) { group in
+                            Text(group.displayName ?? group.name).tag(Optional(group.name))
+                        }
+                    }
                     Toggle("Show Offline Favourites", isOn: Bindable(store).showOfflineFavourites)
                 } header: {
                     Text("Friends")
                 } footer: {
-                    Text("Keeps favourites who are offline at the top of Friends, as the wrist does.")
+                    Text("Choose one of your VRChat favourite groups to keep at the top of Friends, as the wrist does. With Show Offline Favourites on, they stay there when they're offline too; everyone else's favourites sit with the rest.")
                 }
 
                 Section("Developer") {

@@ -11,6 +11,16 @@ final class FriendsStore {
     private(set) var favouriteIds: Set<String> = []
     /// Favourite group display names by user ID
     private(set) var favouriteGroups: [String: [String]] = [:]
+    /// Your friend favourite groups, in VRChat's order
+    private(set) var favouriteGroupList: [VRCFavoriteGroup] = []
+    /// Who's in each favourite group, by its name ("group_0")
+    private(set) var groupMembers: [String: Set<String>] = [:]
+
+    /// The favourite group shown at the top of Friends, as the wrist lets
+    /// you choose; nil for every favourite
+    var favouritesGroup: String? {
+        didSet { UserDefaults.standard.set(favouritesGroup, forKey: "favouritesGroup") }
+    }
     private(set) var worlds: [String: VRCWorld] = [:]
     private(set) var isLoading = false
     private(set) var loadedAt: Date?
@@ -38,17 +48,44 @@ final class FriendsStore {
     init() {
         isDemo = false
         showOfflineFavourites = UserDefaults.standard.bool(forKey: "showOfflineFavourites")
+        favouritesGroup = UserDefaults.standard.string(forKey: "favouritesGroup")
         worlds = WorldCache.load()
     }
 
-    init(demoFriends: [Friend], favourites: Set<String>, groups: [String: [String]], worlds: [VRCWorld]) {
+    init(demoFriends: [Friend], groups: [VRCFavoriteGroup], members: [String: Set<String>], worlds: [VRCWorld]) {
         isDemo = true
         showOfflineFavourites = true
+        favouritesGroup = groups.first?.name
         friends = Dictionary(uniqueKeysWithValues: demoFriends.map { ($0.id, $0) })
-        favouriteIds = favourites
-        favouriteGroups = groups
         self.worlds = Dictionary(uniqueKeysWithValues: worlds.map { ($0.id, $0) })
         loadedAt = Date()
+        setFavourites(groups: groups, members: members)
+    }
+
+    private func setFavourites(groups: [VRCFavoriteGroup], members: [String: Set<String>]) {
+        favouriteGroupList = groups
+        groupMembers = members
+        favouriteIds = members.values.reduce(into: Set<String>()) { $0.formUnion($1) }
+        var byUser: [String: [String]] = [:]
+        for group in groups {
+            for id in members[group.name] ?? [] {
+                byUser[id, default: []].append(group.displayName ?? group.name)
+            }
+        }
+        favouriteGroups = byUser
+    }
+
+    /// The chosen group, if it still exists
+    var chosenFavouritesGroup: VRCFavoriteGroup? {
+        favouriteGroupList.first { $0.name == favouritesGroup }
+    }
+
+    /// Who goes at the top of Friends: the chosen group, or every favourite
+    func isInFavouritesSection(_ friend: Friend) -> Bool {
+        if let group = chosenFavouritesGroup {
+            return groupMembers[group.name]?.contains(friend.id) ?? false
+        }
+        return isFavourite(friend)
     }
 
     func attach(api: VRChatAPI?, session: SessionStore) {
@@ -61,6 +98,8 @@ final class FriendsStore {
         friends = [:]
         favouriteIds = []
         favouriteGroups = [:]
+        favouriteGroupList = []
+        groupMembers = [:]
         loadedAt = nil
         error = nil
         pendingOffline.values.forEach { $0.cancel() }
@@ -133,13 +172,18 @@ final class FriendsStore {
                 URLQueryItem(name: "type", value: "friend"),
                 URLQueryItem(name: "n", value: "50"),
             ])) ?? []
-            let names = Dictionary(groups.map { ($0.name, $0.displayName ?? $0.name) }, uniquingKeysWith: { first, _ in first })
-            favouriteIds = Set(favourites.map(\.favoriteId))
-            var byUser: [String: [String]] = [:]
+            var members: [String: Set<String>] = [:]
             for favourite in favourites {
-                byUser[favourite.favoriteId, default: []] += (favourite.tags ?? []).map { names[$0] ?? $0 }
+                for tag in favourite.tags ?? [] {
+                    members[tag, default: []].insert(favourite.favoriteId)
+                }
             }
-            favouriteGroups = byUser
+            // A favourite whose group the list didn't include still counts
+            var known = groups.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            for tag in members.keys where !known.contains(where: { $0.name == tag }) {
+                known.append(VRCFavoriteGroup(id: tag, name: tag))
+            }
+            setFavourites(groups: known, members: members)
         } catch {
             // Favourites are a nicety: the list works without them
         }
@@ -456,12 +500,14 @@ final class FriendsStore {
         }
 
         var result: [FriendSection] = []
-        // Favourites first, as on the wrist, unless they're what's filtered
+        // Favourites first, as on the wrist (one chosen group, or all of
+        // them), unless they're what's filtered
         var rest = list
         if filter == .all || filter == .online {
-            let favourites = list.filter { isFavourite($0) && (showOfflineFavourites || $0.state != .offline) }
+            let favourites = list.filter { isInFavouritesSection($0) && (showOfflineFavourites || $0.state != .offline) }
             if !favourites.isEmpty {
-                result.append(FriendSection(id: "favourites", title: "Favourites", friends: sorted(favourites)))
+                let title = chosenFavouritesGroup.map { $0.displayName ?? $0.name } ?? "Favourites"
+                result.append(FriendSection(id: "favourites", title: title, friends: sorted(favourites)))
                 let ids = Set(favourites.map(\.id))
                 rest = list.filter { !ids.contains($0.id) }
             }
