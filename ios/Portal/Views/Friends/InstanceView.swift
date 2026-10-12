@@ -87,9 +87,12 @@ struct InstanceView: View {
 
             Section("Details") {
                 LabeledContent("Region", value: "\(place.regionFlag) \(place.regionName)")
-                if let platforms = instance?.platforms, !platforms.isEmpty {
+                // Only the platforms someone's on, busiest first: "PC 6 · Android 3"
+                let platforms = (instance?.platforms ?? [:])
+                    .filter { $0.value > 0 }
+                    .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+                if !platforms.isEmpty {
                     LabeledContent("Platforms", value: platforms
-                        .sorted { $0.key < $1.key }
                         .map { "\(Friend.platformName($0.key) ?? $0.key) \($0.value)" }
                         .joined(separator: " · "))
                 }
