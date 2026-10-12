@@ -211,14 +211,14 @@ final class FeedStore {
         var fresh: [FeedItem] = []
         for _ in 0..<5 {
             let page = try await fetch(api, origin: origin, after: after)
-            if let epoch = page.epoch, let known = self.epoch, epoch != known { return false }
+            if let epoch = page.instance, let known = self.epoch, epoch != known { return false }
             fresh += convert(page.rows, origin: origin)
             after = page.next ?? after
             if page.rows.count < 500 {
                 let known = Set(items.map(\.id))
                 items.insert(contentsOf: fresh.reversed().filter { !known.contains($0.id) }, at: 0)
                 self.cursor = after
-                if self.epoch == nil { self.epoch = page.epoch }
+                if self.epoch == nil { self.epoch = page.instance }
                 return true
             }
         }
@@ -231,7 +231,7 @@ final class FeedStore {
         cursor = page.rows.first?.seq ?? 0
         oldest = page.rows.last?.seq
         hasMore = page.next != nil
-        epoch = page.epoch
+        epoch = page.instance
     }
 
     /// The page before the oldest row shown
@@ -255,8 +255,9 @@ final class FeedStore {
     private struct Page: Decodable {
         let rows: [Row]
         let next: Int?
-        /// Changes if the relay's feed starts again from scratch
-        var epoch: String?
+        /// The relay's database: new if it was wiped or replaced, when its
+        /// numbering starts again. Older relays don't send it.
+        var instance: String?
     }
 
     /// One row of VRCX's feed tables, with VRCX's own column names
