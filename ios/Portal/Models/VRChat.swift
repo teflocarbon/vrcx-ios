@@ -155,6 +155,17 @@ struct VRCUser: Codable, Sendable, Hashable, Identifiable {
             .first { !$0.isEmpty }
     }
 
+    /// Every picture someone has, best first, at `size` pixels: if one
+    /// fails to load, the next is tried
+    func imageURLs(size: Int) -> [String] {
+        var seen = Set<String>()
+        return [userIcon, profilePicOverrideThumbnail, profilePicOverride, currentAvatarThumbnailImageUrl, currentAvatarImageUrl]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .map { VRChatImage.sized($0, size) }
+            .filter { seen.insert($0).inserted }
+    }
+
     /// The larger picture for a profile page
     var largeImageURL: String? {
         [profilePicOverride, currentAvatarImageUrl, imageURL]

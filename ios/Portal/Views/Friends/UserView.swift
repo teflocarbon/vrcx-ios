@@ -118,7 +118,7 @@ struct UserView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 16) {
-            AvatarView(id: userId, name: user.name, url: user.largeImageURL, size: 96)
+            AvatarView(user: user, size: 96)
             VStack(alignment: .leading, spacing: 6) {
                 Text(user.name)
                     .font(.title2.weight(.bold))

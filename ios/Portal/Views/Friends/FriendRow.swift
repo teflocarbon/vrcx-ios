@@ -8,7 +8,7 @@ struct FriendRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AvatarView(id: friend.id, name: friend.name, url: friend.user.imageURL, size: 50)
+            AvatarView(user: friend.user, size: 50)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
                     Text(friend.name)

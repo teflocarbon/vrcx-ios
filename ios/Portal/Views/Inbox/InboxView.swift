@@ -158,7 +158,7 @@ struct InboxRow: View {
     @ViewBuilder
     private var picture: some View {
         if let id = item.senderId {
-            AvatarView(id: id, name: item.senderName ?? friend?.name ?? "?", url: friend?.user.imageURL, size: 44)
+            AvatarView(id: id, name: item.senderName ?? friend?.name ?? "?", urls: friend?.user.imageURLs(size: 256) ?? [], size: 44)
                 .onTapGesture { open(.user(id)) }
         } else if case .v2(let n) = item.source {
             RemoteImage(url: n.imageUrl) {

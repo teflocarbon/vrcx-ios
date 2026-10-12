@@ -67,7 +67,7 @@ struct InstanceView: View {
                     ForEach(here) { friend in
                         NavigationLink(value: Route.user(friend.id)) {
                             HStack(spacing: 12) {
-                                AvatarView(id: friend.id, name: friend.name, url: friend.user.imageURL, size: 36, status: friend.status)
+                                AvatarView(user: friend.user, size: 36, status: friend.status)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(friend.name).font(.body.weight(.medium))
                                     if let since = friend.locationSince {

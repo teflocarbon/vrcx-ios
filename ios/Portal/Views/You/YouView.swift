@@ -115,7 +115,7 @@ private struct ProfileHeader: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            AvatarView(id: me.id, name: me.displayName ?? "You", url: me.asUser.largeImageURL, size: 84)
+            AvatarView(user: me.asUser, size: 84)
             VStack(alignment: .leading, spacing: 4) {
                 Text(me.displayName ?? "You")
                     .font(.title2.weight(.bold))

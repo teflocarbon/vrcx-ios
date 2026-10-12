@@ -175,7 +175,7 @@ private struct OnlineFriendsPicker: View {
                         Task { await push.setOnline(friend.id, on: !on) }
                     } label: {
                         HStack(spacing: 12) {
-                            AvatarView(id: friend.id, name: friend.name, url: friend.user.imageURL, size: 34)
+                            AvatarView(user: friend.user, size: 34)
                             Text(friend.name)
                             if friends.isFavourite(friend) {
                                 Image(systemName: "star.fill").font(.caption2).foregroundStyle(.yellow)

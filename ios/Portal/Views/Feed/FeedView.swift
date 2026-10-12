@@ -132,7 +132,7 @@ struct FeedRow: View {
             open(.user(item.userId))
         } label: {
             HStack(alignment: .top, spacing: 12) {
-                AvatarView(id: item.userId, name: item.name, url: friends.friends[item.userId]?.user.imageURL ?? item.image, size: 38)
+                AvatarView(id: item.userId, name: item.name, urls: friends.friends[item.userId]?.user.imageURLs(size: 256) ?? item.image.map { [VRChatImage.sized($0, 256)] } ?? [], size: 38)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(item.name).font(.subheadline.weight(.semibold))

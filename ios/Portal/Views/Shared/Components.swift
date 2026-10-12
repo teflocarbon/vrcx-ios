@@ -44,9 +44,20 @@ struct ErrorRow: View {
 
 /// A picture from VRChat or the relay, loaded and cached by `ImageLoader`
 struct RemoteImage<Placeholder: View>: View {
-    let url: String?
+    /// Tried in order until one loads
+    let urls: [String]
     @ViewBuilder var placeholder: () -> Placeholder
     @State private var image: UIImage?
+
+    init(url: String?, @ViewBuilder placeholder: @escaping () -> Placeholder) {
+        urls = url.map { [$0] } ?? []
+        self.placeholder = placeholder
+    }
+
+    init(urls: [String], @ViewBuilder placeholder: @escaping () -> Placeholder) {
+        self.urls = urls.filter { !$0.isEmpty }
+        self.placeholder = placeholder
+    }
 
     var body: some View {
         Group {
@@ -56,16 +67,16 @@ struct RemoteImage<Placeholder: View>: View {
                 placeholder()
             }
         }
-        .task(id: url) {
-            guard let url, !url.isEmpty else {
-                image = nil
-                return
-            }
-            if let cached = ImageLoader.shared.cached(url) {
+        .task(id: urls) {
+            if let cached = urls.lazy.compactMap({ ImageLoader.shared.cached($0) }).first {
                 image = cached
                 return
             }
-            image = await ImageLoader.shared.image(url)
+            // A picture already showing stays until another has loaded:
+            // swapping to links that then fail mustn't blank it
+            if let loaded = await ImageLoader.shared.image(urls) {
+                image = loaded
+            }
         }
     }
 }
@@ -75,12 +86,29 @@ struct RemoteImage<Placeholder: View>: View {
 struct AvatarView: View {
     let id: String
     let name: String
-    let url: String?
+    let urls: [String]
     var size: CGFloat = 48
     var status: UserStatus?
 
+    init(id: String, name: String, url: String?, size: CGFloat = 48, status: UserStatus? = nil) {
+        self.init(id: id, name: name, urls: url.map { [$0] } ?? [], size: size, status: status)
+    }
+
+    init(id: String, name: String, urls: [String], size: CGFloat = 48, status: UserStatus? = nil) {
+        self.id = id
+        self.name = name
+        self.urls = urls
+        self.size = size
+        self.status = status
+    }
+
+    /// Someone's own pictures, at a size to suit
+    init(user: VRCUser, size: CGFloat = 48, status: UserStatus? = nil) {
+        self.init(id: user.id, name: user.name, urls: user.imageURLs(size: size > 64 ? 512 : 256), size: size, status: status)
+    }
+
     var body: some View {
-        RemoteImage(url: url) {
+        RemoteImage(urls: urls) {
             ZStack {
                 Palette.tone(for: id)
                 Text(name.first.map { String($0).uppercased() } ?? "?")
