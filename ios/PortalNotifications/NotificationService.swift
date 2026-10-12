@@ -51,10 +51,10 @@ final class NotificationService: UNNotificationServiceExtension {
     private static func imageType(_ mime: String?) -> UTType? {
         guard let mime else { return nil }
         switch mime {
-        case "image/png": .png
-        case "image/jpeg", "image/jpg": .jpeg
-        case "image/gif": .gif
-        default: nil
+        case "image/png": return .png
+        case "image/jpeg", "image/jpg": return .jpeg
+        case "image/gif": return .gif
+        default: return nil
         }
     }
 
