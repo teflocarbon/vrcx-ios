@@ -14,6 +14,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 SIZE = 1024
 SCALE = 4  # drawn large and scaled down, for smooth edges
 OUT = Path(__file__).resolve().parent.parent / "ios/Portal/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+GLYPH = OUT.parent.parent / "Glyph.imageset/Glyph.png"
 
 TOP_LEFT = (74, 64, 214)  # violet
 BOTTOM_RIGHT = (38, 170, 226)  # the wrist's sky blue, deeper
@@ -67,7 +68,10 @@ def main() -> None:
     icon = icon.resize((SIZE, SIZE), Image.LANCZOS).convert("RGB")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     icon.save(OUT)
-    print(f"Wrote {OUT}")
+    # The same picture for the sign-in screen, which can't show the app icon
+    GLYPH.parent.mkdir(parents=True, exist_ok=True)
+    icon.save(GLYPH)
+    print(f"Wrote {OUT} and {GLYPH}")
 
 
 if __name__ == "__main__":

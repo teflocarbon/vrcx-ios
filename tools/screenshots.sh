@@ -10,7 +10,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-$ROOT/screenshots}
 BUNDLE_ID=com.example.portal
-SCREENS=(${SCREENS:-friends inbox feed you})
+SCREENS=(${SCREENS:-friends friend world you signIn inbox feed})
 
 echo "== Building for the simulator"
 (cd "$ROOT/ios" && xcodegen generate --quiet)
