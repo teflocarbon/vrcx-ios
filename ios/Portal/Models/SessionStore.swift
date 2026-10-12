@@ -35,6 +35,8 @@ final class SessionStore {
     let feed: FeedStore
     /// Something new arrived in the inbox while Portal is open
     @ObservationIgnored var onArrival: ((InboxItem) -> Void)?
+    /// So signing out can stop the relay pushing to this phone
+    @ObservationIgnored weak var push: PushStore?
     private let isDemo: Bool
 
     private static let connectionKey = "connection"
@@ -206,6 +208,7 @@ final class SessionStore {
     /// Sign out: from a relay this only ends Portal's relay login; directly,
     /// it ends this VRChat session (others, like VRCX's, carry on)
     func signOut() async {
+        await push?.unregister()
         stopLive()
         if let api {
             try? await api.send(api.connection.isRelay ? "POST" : "PUT", "logout")

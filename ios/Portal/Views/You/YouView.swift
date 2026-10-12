@@ -5,6 +5,7 @@ struct YouView: View {
     @Environment(SessionStore.self) private var session
     @Environment(FriendsStore.self) private var store
     @State private var path: [Route] = []
+    @Environment(PushStore.self) private var push
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -48,6 +49,20 @@ struct YouView: View {
                     Text("Connection")
                 } footer: {
                     Text("Live updates run while Portal is open. iOS stops them soon after you leave, and Portal catches up when you come back.")
+                }
+
+                Section {
+                    NavigationLink {
+                        NotificationsView()
+                    } label: {
+                        LabeledContent {
+                            Text(push.isOn ? "On" : "Off")
+                        } label: {
+                            IconText(symbol: "bell.badge", text: "Notifications")
+                        }
+                    }
+                } footer: {
+                    Text("Invites, requests and friends coming online, from your relay, even while Portal is closed.")
                 }
 
                 Section {

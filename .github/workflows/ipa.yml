@@ -38,8 +38,12 @@ jobs:
         run: |
           mkdir -p ipa/Payload
           cp -R build/Build/Products/Release-iphoneos/Portal.app ipa/Payload/
-          # Ad-hoc signed, so a signer sees a well-formed bundle
-          codesign --force --sign - ipa/Payload/Portal.app
+          app=ipa/Payload/Portal.app
+          # Ad-hoc signed with its entitlements, so a signer knows Portal
+          # wants push (and the extension comes along)
+          codesign --force --sign - "$app/PlugIns/PortalNotifications.appex"
+          codesign --force --sign - --entitlements ios/Portal/Portal.entitlements "$app"
+          codesign -d --entitlements - "$app"
           (cd ipa && zip -qry ../Portal.ipa Payload)
           ls -l Portal.ipa
       - uses: actions/upload-artifact@v4

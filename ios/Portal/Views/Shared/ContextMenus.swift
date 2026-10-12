@@ -7,6 +7,7 @@ struct FriendMenu: View {
     let open: (Route) -> Void
     @Environment(FriendsStore.self) private var store
     @Environment(Actions.self) private var actions
+    @Environment(PushStore.self) private var push
 
     var body: some View {
         Button {
@@ -49,6 +50,17 @@ struct FriendMenu: View {
                     open(.world(place.worldId))
                 } label: {
                     Label("View World", systemImage: "globe")
+                }
+            }
+        }
+
+        if push.isOn && push.wants(.friendOnline) {
+            Section {
+                Toggle(isOn: Binding(
+                    get: { push.notifiesOnline(friend.id) },
+                    set: { on in Task { await push.setOnline(friend.id, on: on) } }
+                )) {
+                    Label("Notify When Online", systemImage: "bell")
                 }
             }
         }

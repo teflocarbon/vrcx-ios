@@ -2,3 +2,5 @@
 /Portal.xcodeproj/
 /Portal/Info.plist
 /build/
+/Portal/Portal.entitlements
+/PortalNotifications/Info.plist

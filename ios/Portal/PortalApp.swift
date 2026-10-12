@@ -1,12 +1,16 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct PortalApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var session: SessionStore
     @State private var friends: FriendsStore
     @State private var inbox: InboxStore
     @State private var feed: FeedStore
+    @State private var push: PushStore
+    @State private var links = DeepLinks.shared
     @State private var actions = Actions()
     @State private var tab = Demo.isOn ? Demo.tab : AppTab.friends
 
@@ -14,12 +18,16 @@ struct PortalApp: App {
         let friends = Demo.isOn ? Demo.friends() : FriendsStore()
         let inbox = Demo.isOn ? Demo.inbox() : InboxStore()
         let feed = Demo.isOn ? Demo.feed() : FeedStore()
+        let push = Demo.isOn ? PushStore(demo: true) : PushStore()
         let session = Demo.isOn
             ? Demo.session(friends: friends, inbox: inbox, feed: feed)
             : SessionStore(friends: friends, inbox: inbox, feed: feed)
         _friends = State(initialValue: friends)
         _inbox = State(initialValue: inbox)
         _feed = State(initialValue: feed)
+        _push = State(initialValue: push)
+        AppDelegate.push = push
+        session.push = push
         _session = State(initialValue: session)
     }
 
@@ -34,10 +42,12 @@ struct PortalApp: App {
                 .environment(friends)
                 .environment(inbox)
                 .environment(feed)
+                .environment(push)
                 .environment(actions)
                 .overlay(alignment: .bottom) { ToastView().environment(actions) }
                 .task {
                     actions.attach(session)
+                    push.attach(session)
                     session.onArrival = { item in
                         let name = item.senderName ?? "Someone"
                         actions.show("\(name): \(item.headline(worldName: nil))", symbol: "tray.and.arrow.down.fill")
@@ -49,6 +59,27 @@ struct PortalApp: App {
                     } else {
                         await session.restore()
                     }
+                }
+                .onChange(of: session.phase) { _, phase in
+                    if phase == .signedIn { Task { await push.setUp() } }
+                }
+                .onChange(of: links.pending) { _, destination in
+                    switch destination {
+                    case .inbox:
+                        tab = .inbox
+                        links.pending = nil
+                    case .you:
+                        tab = .you
+                        links.pending = nil
+                    case .user:
+                        // Friends opens the profile, then clears it
+                        tab = .friends
+                    case nil:
+                        break
+                    }
+                }
+                .onChange(of: inbox.unreadCount) { _, count in
+                    UNUserNotificationCenter.current().setBadgeCount(count) { _ in }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {

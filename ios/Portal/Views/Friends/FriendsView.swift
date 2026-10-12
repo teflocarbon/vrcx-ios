@@ -101,6 +101,13 @@ struct FriendsView: View {
                 RouteView(route: route, path: $path)
             }
         }
+        // A tapped notification about someone opens their profile
+        .onChange(of: DeepLinks.shared.pending) { _, destination in
+            if case .user(let id) = destination {
+                path = [.user(id)]
+                DeepLinks.shared.pending = nil
+            }
+        }
     }
 
     private func count(for filter: FriendFilter) -> Int? {

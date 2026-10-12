@@ -18,6 +18,16 @@ targets:
     platform: iOS
     sources:
       - Portal
+    dependencies:
+      # Adds senders' pictures to push notifications
+      - target: PortalNotifications
+    # Push from the relay, and invites that can break through Focus. CI
+    # ad-hoc signs with these, so the signer knows to provision them.
+    entitlements:
+      path: Portal/Portal.entitlements
+      properties:
+        aps-environment: development
+        com.apple.developer.usernotifications.time-sensitive: true
     settings:
       base:
         # A placeholder: the signer re-provisions it with your own
@@ -42,3 +52,23 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+  # A notification service extension: downloads the sender's picture from
+  # the relay's image route and attaches it to the push
+  PortalNotifications:
+    type: app-extension
+    platform: iOS
+    sources:
+      - PortalNotifications
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.portal.NotificationService
+        TARGETED_DEVICE_FAMILY: "1,2"
+    info:
+      path: PortalNotifications/Info.plist
+      properties:
+        CFBundleDisplayName: Portal Notifications
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
