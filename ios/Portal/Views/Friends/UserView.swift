@@ -184,11 +184,12 @@ struct UserView: View {
         let trust = TrustRank(tags: user.tags)
         items.append(.init(label: "Trust", value: trust.name, color: trust.color))
         if let friend, friend.isInGame, let since = friend.locationSince {
-            items.append(.init(label: "Here For", value: since.durationSince, detail: "in this instance"))
+            items.append(.init(label: "Here For", value: since.durationSince))
         } else if let friend, friend.state == .offline, let seen = Date(vrchat: user.lastLogin) {
             items.append(.init(label: "Last Seen", value: seen.shortAgo))
-        }
-        if let platform = Friend.platformName(friend?.platform ?? user.lastPlatform) {
+        } else if let platform = Friend.platformName(friend?.platform ?? user.lastPlatform) {
+            // Otherwise the platform, which Details also lists: three
+            // columns keep each one roomy enough not to cut words off
             items.append(.init(label: "Platform", value: platform))
         }
         return items

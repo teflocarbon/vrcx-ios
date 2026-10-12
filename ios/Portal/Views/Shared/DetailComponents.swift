@@ -14,32 +14,53 @@ struct StatsStrip: View {
     let items: [Item]
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 0) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    if index > 0 {
-                        Divider().frame(height: 40).padding(.top, 6)
-                    }
-                    // Every column the same shape, detail or not, so they line up
-                    VStack(spacing: 4) {
-                        Text(item.label.uppercased())
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        Text(item.value)
-                            .font(.headline)
-                            .foregroundStyle(item.color ?? .primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
+        // Up to four share the width evenly, centred, as on the App Store;
+        // more than that scroll
+        if items.count <= 4 {
+            row(fill: true)
+                .padding(.horizontal, 8)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                row(fill: false).padding(.horizontal, 6)
+            }
+        }
+    }
+
+    /// A detail line only when some column has one, so a strip without any
+    /// isn't padded with an empty line
+    private var hasDetail: Bool { items.contains { $0.detail != nil } }
+
+    private func row(fill: Bool) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 {
+                    // Centred on the columns, a little shorter than them; columns
+                    // are top-aligned so a shrunk value can't push its label down
+                    Divider()
+                        .frame(height: hasDetail ? 36 : 28)
+                        .padding(.top, hasDetail ? 13 : 8)
+                }
+                // Every column the same shape, detail or not, so they line up
+                VStack(spacing: 4) {
+                    Text(item.label.uppercased())
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(item.value)
+                        .font(.headline)
+                        .foregroundStyle(item.color ?? .primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    if hasDetail {
                         Text(item.detail ?? " ")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-                    .frame(width: 104)
-                    .padding(.horizontal, 4)
                 }
+                .frame(width: fill ? nil : 104)
+                .frame(maxWidth: fill ? .infinity : nil)
+                .padding(.horizontal, 4)
             }
-            .padding(.horizontal, 6)
         }
     }
 }
