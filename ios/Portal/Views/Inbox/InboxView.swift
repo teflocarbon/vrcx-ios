@@ -113,6 +113,12 @@ struct InboxRow: View {
                     Text(item.senderName ?? friend?.name ?? title)
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
+                    if let friend, friends.isFavourite(friend) {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.yellow)
+                            .accessibilityLabel("Favourite")
+                    }
                     if !item.seen {
                         Circle().fill(Color.accentColor).frame(width: 8, height: 8)
                             .accessibilityLabel("Unread")

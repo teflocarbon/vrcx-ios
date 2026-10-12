@@ -72,9 +72,15 @@ final class FeedStore {
     private(set) var hasMore = false
     var error: String?
 
-    var favouritesOnly: Bool {
-        didSet { UserDefaults.standard.set(favouritesOnly, forKey: "feedFavouritesOnly") }
+    /// Whose rows to show: everyone (nil), every favourite
+    /// (`FeedStore.allFavourites`), or one favourite group by its name
+    var audience: String? {
+        didSet { UserDefaults.standard.set(audience, forKey: "feedAudience") }
     }
+
+    static let allFavourites = "*"
+
+    var isFiltered: Bool { audience != nil }
 
     @ObservationIgnored private weak var session: SessionStore?
     /// Where Portal has read up to in the relay's feed, and the oldest row
@@ -92,7 +98,9 @@ final class FeedStore {
 
     init() {
         isDemo = false
-        favouritesOnly = UserDefaults.standard.bool(forKey: "feedFavouritesOnly")
+        // Before groups, this was a plain "favourites only" switch
+        audience = UserDefaults.standard.string(forKey: "feedAudience")
+            ?? (UserDefaults.standard.bool(forKey: "feedFavouritesOnly") ? Self.allFavourites : nil)
         let saved = Self.load()
         items = saved.items
         cursor = saved.cursor
@@ -103,7 +111,7 @@ final class FeedStore {
 
     init(demoItems: [FeedItem]) {
         isDemo = true
-        favouritesOnly = false
+        audience = nil
         items = demoItems
         relayFeed = true
     }
@@ -121,10 +129,11 @@ final class FeedStore {
         }
     }
 
-    func filtered(_ filter: FeedFilter, favourites: Set<String>, search: String) -> [FeedItem] {
+    /// `people`: who the audience allows, or nil for everyone
+    func filtered(_ filter: FeedFilter, people: Set<String>?, search: String) -> [FeedItem] {
         items.filter { item in
             filter.includes(item.kind)
-                && (!favouritesOnly || favourites.contains(item.userId))
+                && (people?.contains(item.userId) ?? true)
                 && (search.isEmpty || item.name.localizedCaseInsensitiveContains(search)
                     || (item.worldName?.localizedCaseInsensitiveContains(search) ?? false))
         }

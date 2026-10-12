@@ -75,6 +75,20 @@ final class FriendsStore {
         favouriteGroups = byUser
     }
 
+    /// Who a feed audience covers: nil for everyone, every favourite, or one
+    /// favourite group's members
+    func people(in audience: String?) -> Set<String>? {
+        guard let audience else { return nil }
+        if audience == FeedStore.allFavourites { return favouriteIds }
+        return groupMembers[audience] ?? []
+    }
+
+    /// "favourites", or a group's name, for "Showing … only"
+    func audienceName(_ audience: String?) -> String {
+        guard let audience, audience != FeedStore.allFavourites else { return "favourites" }
+        return favouriteGroupList.first { $0.name == audience }.map { $0.displayName ?? $0.name } ?? "one favourite group"
+    }
+
     /// The chosen group, if it still exists
     var chosenFavouritesGroup: VRCFavoriteGroup? {
         favouriteGroupList.first { $0.name == favouritesGroup }

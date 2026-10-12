@@ -21,15 +21,15 @@ struct FeedView: View {
 
                 ConnectionBanner()
 
-                if feed.favouritesOnly {
+                if feed.isFiltered {
                     Section {
                         HStack {
-                            Label("Showing favourites only", systemImage: "star.fill")
+                            Label("Showing \(friends.audienceName(feed.audience)) only", systemImage: "star.fill")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Button("Show Everyone") {
-                                withAnimation { feed.favouritesOnly = false }
+                                withAnimation { feed.audience = nil }
                             }
                             .font(.subheadline.weight(.semibold))
                             .buttonStyle(.borderless)
@@ -37,7 +37,7 @@ struct FeedView: View {
                     }
                 }
 
-                let items = feed.filtered(filter, favourites: friends.favouriteIds, search: search)
+                let items = feed.filtered(filter, people: friends.people(in: feed.audience), search: search)
                 ForEach(days(items), id: \.day) { group in
                     Section(group.title) {
                         ForEach(group.items) { item in
@@ -71,7 +71,7 @@ struct FeedView: View {
                 }
             }
             .overlay {
-                if feed.filtered(filter, favourites: friends.favouriteIds, search: search).isEmpty {
+                if feed.filtered(filter, people: friends.people(in: feed.audience), search: search).isEmpty {
                     if !search.isEmpty {
                         ContentUnavailableView.search(text: search)
                     } else if feed.isLoading {
@@ -91,12 +91,20 @@ struct FeedView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Toggle(isOn: Bindable(feed).favouritesOnly) {
-                            Label("Favourites Only", systemImage: "star")
+                        Picker(selection: Bindable(feed).audience) {
+                            Label("Everyone", systemImage: "person.2").tag(String?.none)
+                            Label("All Favourites", systemImage: "star.fill").tag(Optional(FeedStore.allFavourites))
+                            ForEach(friends.favouriteGroupList) { group in
+                                Label(group.displayName ?? group.name, systemImage: "star")
+                                    .tag(Optional(group.name))
+                            }
+                        } label: {
+                            Label("Show", systemImage: "person.2")
                         }
+                        .pickerStyle(.inline)
                     } label: {
                         // Filled while a filter is on, so it never hides rows unnoticed
-                        Label("Options", systemImage: feed.favouritesOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+                        Label("Options", systemImage: feed.isFiltered ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
                     }
                 }
             }
@@ -153,6 +161,13 @@ struct FeedRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(item.name).font(.subheadline.weight(.semibold))
+                        // Favourites marked as on Friends (and the wrist)
+                        if friends.favouriteIds.contains(item.userId) {
+                            Image(systemName: "star.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.yellow)
+                                .accessibilityLabel("Favourite")
+                        }
                         Spacer(minLength: 4)
                         Text(item.date.formatted(date: .omitted, time: .shortened))
                             .font(.caption)
