@@ -196,3 +196,26 @@ struct FlowLayout: Layout {
         }
     }
 }
+
+/// A group's icon and name, small: who owns a group instance
+struct GroupLabel: View {
+    let group: VRCGroup
+
+    var body: some View {
+        HStack(spacing: 6) {
+            RemoteImage(url: group.iconUrl.map { VRChatImage.sized($0, 256) }) {
+                ZStack {
+                    Color.accentColor.opacity(0.2)
+                    Image(systemName: "person.3.fill").font(.system(size: 8)).foregroundStyle(.tint)
+                }
+            }
+            .frame(width: 18, height: 18)
+            .clipShape(.rect(cornerRadius: 5, style: .continuous))
+            Text(group.name ?? "Group")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}

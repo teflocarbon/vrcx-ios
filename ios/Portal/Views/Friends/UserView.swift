@@ -251,6 +251,9 @@ struct LocationCard: View {
                             .joined(separator: " · "))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                        if let group = store.group(for: place) {
+                            GroupLabel(group: group)
+                        }
                         if store.isWithYou(friend) {
                             Badge("With You", color: .accentColor, symbol: "person.2.fill")
                         } else {
@@ -268,5 +271,6 @@ struct LocationCard: View {
         }
         .tint(.primary)
         .disabled(!place.isInstance)
+        .onAppear { store.requestGroup(friend.place.groupId) }
     }
 }

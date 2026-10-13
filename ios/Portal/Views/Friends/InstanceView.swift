@@ -16,6 +16,13 @@ struct InstanceView: View {
     @State private var loading = false
 
     private var place: Location { Location(location) }
+
+    /// Who hosts a friends or invite instance, when it's you or a friend
+    private var ownerName: String? {
+        guard let owner = place.ownerId ?? instance?.ownerId, owner.hasPrefix("usr_") else { return nil }
+        if owner == store.myId { return "You" }
+        return store.friends[owner]?.name
+    }
     private var world: VRCWorld? { instance?.world ?? store.world(for: place) }
     private static let freshFor: TimeInterval = 5 * 60
 
@@ -29,9 +36,15 @@ struct InstanceView: View {
                         Text(world?.name ?? "Instance")
                             .font(.title3.weight(.bold))
                             .lineLimit(2)
-                        Text("#\(place.instanceName)")
+                        // Its own name when it has one ("Movie Night · #12345")
+                        Text([instance?.displayName, "#\(place.instanceName)"]
+                            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                        if let group = store.group(for: place) {
+                            GroupLabel(group: group)
+                        }
                         HStack(spacing: 6) {
                             Badge(place.accessName, color: .accentColor)
                             if place.ageGate {
@@ -86,6 +99,18 @@ struct InstanceView: View {
             }
 
             Section("Details") {
+                if let group = store.group(for: place) {
+                    LabeledContent("Group") {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(group.name ?? "Group")
+                            if let code = group.code {
+                                Text(code).font(.caption).foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                } else if let owner = ownerName {
+                    LabeledContent("Hosted By", value: owner)
+                }
                 LabeledContent("Region", value: "\(place.regionFlag) \(place.regionName)")
                 // Only the platforms someone's on, busiest first: "PC 6 · Android 3"
                 let platforms = (instance?.platforms ?? [:])
@@ -122,7 +147,10 @@ struct InstanceView: View {
                 .disabled(loading)
             }
         }
-        .task(id: location) { await load() }
+        .task(id: location) {
+            store.requestGroup(place.groupId)
+            await load()
+        }
         .refreshable { await load() }
     }
 

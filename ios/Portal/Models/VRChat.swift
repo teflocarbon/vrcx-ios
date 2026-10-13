@@ -231,10 +231,12 @@ struct VRCInstance: Codable, Sendable, Hashable {
     var hasCapacityForYou: Bool?
     var world: VRCWorld?
     var platforms: [String: Int]?
+    /// A custom name some instances have ("Movie Night"); nil for most
+    var displayName: String?
 
     enum CodingKeys: String, CodingKey {
         case id, location, worldId, instanceId, name, type, region, capacity, userCount
-        case queueSize, queueEnabled, ownerId, closedAt, full, hasCapacityForYou, world, platforms
+        case queueSize, queueEnabled, ownerId, closedAt, full, hasCapacityForYou, world, platforms, displayName
         case nUsers = "n_users"
     }
 
@@ -271,4 +273,20 @@ struct VRCErrorBody: Decodable {
     }
 
     let error: Inner?
+}
+
+/// A group, from `groups/{id}`: who owns a group instance
+struct VRCGroup: Codable, Sendable, Hashable, Identifiable {
+    let id: String
+    var name: String?
+    var shortCode: String?
+    var discriminator: String?
+    var iconUrl: String?
+    var memberCount: Int?
+
+    /// "FURRY.1234", as VRChat shows a group's code
+    var code: String? {
+        guard let shortCode, !shortCode.isEmpty else { return nil }
+        return discriminator.map { "\(shortCode).\($0)" } ?? shortCode
+    }
 }

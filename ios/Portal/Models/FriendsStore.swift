@@ -22,6 +22,9 @@ final class FriendsStore {
         didSet { UserDefaults.standard.set(favouritesGroup, forKey: "favouritesGroup") }
     }
     private(set) var worlds: [String: VRCWorld] = [:]
+    /// Groups that own instances friends are in, fetched as they're needed
+    private(set) var groups: [String: VRCGroup] = [:]
+    @ObservationIgnored private var groupsLoading: Set<String> = []
     private(set) var isLoading = false
     private(set) var loadedAt: Date?
     var error: String?
@@ -420,6 +423,24 @@ final class FriendsStore {
     private func requestWorlds(for friends: [Friend]) {
         let ids = Set(friends.filter(\.isInGame).map(\.place.worldId))
         for id in ids { requestWorld(id) }
+    }
+
+    /// Fetch a group's name and icon if Portal doesn't have them yet
+    func requestGroup(_ id: String?) {
+        guard let id, id.hasPrefix("grp_"), groups[id] == nil, !groupsLoading.contains(id), !isDemo,
+              let api else { return }
+        groupsLoading.insert(id)
+        Task {
+            if let group: VRCGroup = try? await api.get("groups/\(id)") {
+                groups[id] = group
+            }
+            groupsLoading.remove(id)
+        }
+    }
+
+    /// The group that owns an instance, if Portal has it
+    func group(for location: Location) -> VRCGroup? {
+        location.groupId.flatMap { groups[$0] }
     }
 
     /// Load a world afresh, for its page: player counts change
