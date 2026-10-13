@@ -127,7 +127,7 @@ struct WorldView: View {
             loaded = try await store.loadWorld(worldId)
             error = nil
         } catch {
-            store.handle(error)
+            store.handleSession(error)
             if world == nil { self.error = error.userMessage }
         }
     }

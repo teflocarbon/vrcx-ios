@@ -140,11 +140,14 @@ struct InboxItem: Codable, Identifiable, Hashable, Sendable {
 
     var isSocial: Bool { kind != .group && kind != .other }
 
+    /// The person it's from: never blank (VRChat's own notices have no
+    /// sender), and only a user, not a group
     var senderId: String? {
-        switch source {
+        let id: String? = switch source {
         case .v1(let n): n.senderUserId
         case .v2(let n): n.senderUserId
         }
+        return id.flatMap { $0.hasPrefix("usr_") ? $0 : nil }
     }
 
     var senderName: String? {
@@ -199,7 +202,8 @@ struct InboxItem: Codable, Identifiable, Hashable, Sendable {
             if let text, !text.isEmpty { return text }
             return nil
         case .v2(let n):
-            return n.message
+            // Group posts often end in blank lines
+            return n.message?.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 

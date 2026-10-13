@@ -73,7 +73,7 @@ final class InboxStore {
             loadedAt = Date()
             error = nil
         } catch {
-            session?.friends.handle(error)
+            session?.friends.handleSession(error)
             self.error = error.userMessage
         }
     }

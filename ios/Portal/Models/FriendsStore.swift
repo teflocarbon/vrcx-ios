@@ -220,6 +220,20 @@ final class FriendsStore {
                       travelingTo: user.travelingToLocation, platform: user.platform)
     }
 
+    /// Only what ends or pauses the session: for a page or an action, whose
+    /// own failure shows where it happened, not as the Friends banner
+    func handleSession(_ error: Error) {
+        switch error {
+        case APIError.signedOut:
+            session?.sessionEnded()
+        case APIError.relaySignedOut:
+            session?.relayIsSignedOut()
+        default:
+            break
+        }
+    }
+
+    /// A failed refresh of the friends list: also shown as its banner
     func handle(_ error: Error) {
         switch error {
         case APIError.signedOut:

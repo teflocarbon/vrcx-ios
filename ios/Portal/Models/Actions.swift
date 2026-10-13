@@ -59,7 +59,7 @@ final class Actions {
             try await work(api)
             show(success, symbol: symbol)
         } catch {
-            session?.friends.handle(error)
+            session?.friends.handleSession(error)
             show(error.userMessage, symbol: "exclamationmark.triangle.fill", failed: true)
         }
     }

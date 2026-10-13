@@ -210,7 +210,7 @@ struct UserView: View {
             profile = try await api.get("users/\(userId)")
             error = nil
         } catch {
-            store.handle(error)
+            store.handleSession(error)
             self.error = error.userMessage
         }
     }
