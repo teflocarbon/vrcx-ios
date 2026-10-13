@@ -195,11 +195,11 @@ struct InboxRow: View {
             picture
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(item.senderName ?? friend?.name ?? title)
+                    Text(item.displayName ?? friend?.name ?? title)
                         .font(.body.weight(.semibold))
                         // A group notice's title carries the group and the
                         // subject: give it room
-                        .lineLimit(item.senderId == nil ? 2 : 1)
+                        .lineLimit(isGroupNotice ? 2 : 1)
                     if let friend, friends.isFavourite(friend) {
                         Image(systemName: "star.fill")
                             .font(.caption2)
@@ -223,13 +223,16 @@ struct InboxRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                 }
-                if let note = item.note, !note.isEmpty, item.kind != .group {
-                    Text("“\(note)”")
-                        .font(.subheadline)
-                        .lineLimit(3)
-                } else if item.kind == .group, let note = item.note {
-                    ExpandableText(text: note, lineLimit: 2)
-                        .font(.subheadline)
+                if let note = item.note, !note.isEmpty {
+                    if isGroupNotice {
+                        ExpandableText(text: note, lineLimit: 3)
+                            .font(.subheadline)
+                    } else {
+                        // Only what someone wrote is quoted
+                        Text("“\(note)”")
+                            .font(.subheadline)
+                            .lineLimit(3)
+                    }
                 }
                 answers
                     .padding(.top, 4)
@@ -241,23 +244,38 @@ struct InboxRow: View {
         }
     }
 
-    /// A group notice leads with its own title ("Test Group posted an
-    /// announcement"); anything else from no one is just a notification
-    private var title: String {
-        if case .v2(let n) = item.source, let title = n.title, !title.isEmpty { return title }
-        return item.kind == .group ? "Group" : "Notification"
+    /// A group's icon; VRChat's own links go through the relay, whose image
+    /// route needs no session (history from VRCX keeps VRChat's links)
+    private var noticeImage: String? {
+        guard case .v2(let n) = item.source, let link = n.imageUrl else { return nil }
+        if case .relay(let origin)? = session.connection {
+            return FeedStore.throughRelay(link, origin: origin)
+        }
+        return link
     }
 
+    private var isGroupNotice: Bool {
+        if case .v2 = item.source { return true }
+        return false
+    }
+
+    /// When a notice has no title or sender name at all
+    private var title: String {
+        item.kind == .group ? "Group Notice" : "VRChat"
+    }
+
+    /// A person's picture for someone you know; otherwise the notice's own
+    /// (a group's icon), or a placeholder
     @ViewBuilder
     private var picture: some View {
-        if let id = item.senderId {
+        if let id = item.senderId, id.hasPrefix("usr_"), !isGroupNotice || friend != nil {
             AvatarView(id: id, name: item.senderName ?? friend?.name ?? "?", urls: friend?.user.imageURLs(size: 256) ?? [], size: 44)
                 .onTapGesture { open(.user(id)) }
-        } else if case .v2(let n) = item.source {
-            RemoteImage(url: n.imageUrl) {
+        } else {
+            RemoteImage(url: noticeImage.map { VRChatImage.sized($0, 256) }) {
                 ZStack {
                     Color.accentColor.opacity(0.2)
-                    Image(systemName: "person.3.fill").foregroundStyle(.tint)
+                    Image(systemName: isGroupNotice ? "person.3.fill" : "bell.fill").foregroundStyle(.tint)
                 }
             }
             .frame(width: 44, height: 44)

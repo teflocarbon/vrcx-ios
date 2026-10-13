@@ -245,6 +245,23 @@ enum Demo {
             HistoryEntry(id: group.id, seq: 40, item: InboxItem(source: .v2(group)), seen: true, hidden: false,
                          responded: false, expired: false),
             past(4, "inviteResponse", from: 2, minutes: 60 * 50),
+            {
+                // VRChat's own lines, as VRCX keeps them
+                var entry = past(5, "boop", from: 3, minutes: 60 * 52, hidden: true)
+                if case .v1(var n) = entry.item.source {
+                    n.message = "\(people[2].name) Booped You! splash"
+                    entry.item = InboxItem(source: .v1(n))
+                }
+                return entry
+            }(),
+            {
+                var entry = past(6, "message", from: 4, minutes: 60 * 53, hidden: true)
+                if case .v1(var n) = entry.item.source {
+                    n.message = "\(people[3].name) has gifted you 1 months of VRC+!"
+                    entry.item = InboxItem(source: .v1(n))
+                }
+                return entry
+            }(),
         ])
     }
 

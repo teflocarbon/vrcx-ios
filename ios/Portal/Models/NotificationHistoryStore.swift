@@ -163,9 +163,11 @@ final class NotificationHistoryStore {
 
     private func upsert(_ rows: [Row]) {
         guard !rows.isEmpty else { return }
+        var origin: URL?
+        if case .relay(let relay)? = session?.connection { origin = relay }
         var byId = Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for row in rows {
-            if let entry = row.entry() { byId[entry.id] = entry }
+            if let entry = row.entry(origin: origin) { byId[entry.id] = entry }
         }
         entries = byId.values.sorted { $0.date > $1.date }
     }
@@ -192,7 +194,9 @@ final class NotificationHistoryStore {
         let data: Columns
         var state: State?
 
-        func entry() -> HistoryEntry? {
+        /// `origin`: the relay, which VRChat's own picture links are sent
+        /// through (its image route needs no session)
+        func entry(origin: URL?) -> HistoryEntry? {
             let item: InboxItem
             if table == "notifications_v2" {
                 var n = VRCNotificationV2(id: id, type: data.type ?? "")
@@ -200,7 +204,9 @@ final class NotificationHistoryStore {
                 n.message = data.message
                 n.senderUserId = data.senderUserId
                 n.senderUsername = data.senderUsername
-                n.imageUrl = data.imageUrl.flatMap { $0.isEmpty ? nil : $0 }
+                n.imageUrl = data.imageUrl
+                    .flatMap { $0.isEmpty ? nil : $0 }
+                    .map { link in origin.map { FeedStore.throughRelay(link, origin: $0) } ?? link }
                 n.link = data.link
                 n.linkText = data.linkText
                 n.createdAt = data.createdAt

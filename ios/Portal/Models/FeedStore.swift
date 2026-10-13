@@ -423,7 +423,7 @@ final class FeedStore {
 
     /// VRChat's own image links, sent the relay's way: its image route needs
     /// no session
-    static func throughRelay(_ link: String, origin: URL) -> String {
+    nonisolated static func throughRelay(_ link: String, origin: URL) -> String {
         let prefix = Connection.vrchatAPI.absoluteString
         guard link.hasPrefix(prefix) else { return link }
         return origin.appending(path: "api/1/").absoluteString + link.dropFirst(prefix.count)

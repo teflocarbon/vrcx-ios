@@ -148,10 +148,27 @@ struct InboxItem: Codable, Identifiable, Hashable, Sendable {
     }
 
     var senderName: String? {
-        switch source {
+        let name: String? = switch source {
         case .v1(let n): n.senderUsername
         case .v2(let n): n.senderUsername
         }
+        // VRCX keeps a blank name for notices from VRChat itself
+        return name.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Who or what it's from, for the row's name: a group notice leads with
+    /// its title ("Test Group posted an announcement")
+    var displayName: String? {
+        guard case .v2(let n) = source else { return senderName }
+        if let title = n.title, !title.isEmpty { return title }
+        return senderName
+    }
+
+    /// Notices VRChat writes itself (a boop, a gift of VRC+): a plain line,
+    /// never quoted as if the sender had written it
+    var isSystemLine: Bool {
+        guard case .v1 = source else { return false }
+        return kind == .other || kind == .message
     }
 
     var date: Date? {
@@ -180,7 +197,6 @@ struct InboxItem: Codable, Identifiable, Hashable, Sendable {
         case .v1(let n):
             let text = n.details?.inviteMessage ?? n.details?.requestMessage ?? n.details?.responseMessage
             if let text, !text.isEmpty { return text }
-            if kind == .message, let message = n.message, !message.isEmpty { return message }
             return nil
         case .v2(let n):
             return n.message
@@ -198,12 +214,27 @@ struct InboxItem: Codable, Identifiable, Hashable, Sendable {
             case .friendRequest: return "Sent you a friend request"
             case .inviteResponse: return "Replied to your invite"
             case .requestResponse: return "Replied to your invite request"
-            case .message: return "Sent you a message"
-            default: return n.message ?? n.type
+            case .message, .group, .other: return Self.systemLine(n)
             }
         case .v2(let n):
             return n.title ?? n.message ?? "Notification"
         }
+    }
+
+    /// "Booped you", "Gifted you 1 month of VRC+": VRChat's own text, without
+    /// the sender's name it starts with (the row already shows it)
+    private static func systemLine(_ n: VRCNotification) -> String {
+        if n.type == "boop" { return "Booped you" }
+        var text = (n.message ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "\" ").union(.whitespaces))
+        if let name = n.senderUsername, !name.isEmpty, text.hasPrefix(name) {
+            text = String(text.dropFirst(name.count)).trimmingCharacters(in: .whitespaces)
+            for verb in ["has ", "is "] where text.hasPrefix(verb) {
+                text = String(text.dropFirst(verb.count))
+            }
+        }
+        text = text.replacingOccurrences(of: "1 months", with: "1 month")
+        guard let first = text.first else { return n.type.capitalized }
+        return first.uppercased() + text.dropFirst()
     }
 
     func with(seen: Bool) -> InboxItem {
