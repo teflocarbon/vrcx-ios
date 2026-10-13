@@ -9,9 +9,6 @@ struct InboxView: View {
     @Environment(FriendsStore.self) private var friends
     @State private var path: [Route] = []
     @State private var filter: InboxFilter = Demo.isOn && Demo.screen == .history ? .history : .all
-    /// Which look to use, while we choose one (Developer → Inbox Style)
-    @AppStorage("inboxStyle") private var style: InboxStyle = .current
-    @State private var detail: InboxItem?
 
     /// History only when the relay keeps it
     private var filters: [InboxFilter] {
@@ -58,87 +55,11 @@ struct InboxView: View {
                 RouteView(route: route, path: $path)
             }
             .task { await history.refresh() }
-            .sheet(item: $detail) { item in
-                InboxDetailSheet(item: item)
-            }
         }
     }
 
     @ViewBuilder
     private var liveSection: some View {
-        switch style {
-        case .current: currentSection
-        case .activity, .mail: styledSection(inbox.filtered(filter))
-        case .cards: cardSections
-        case .sections: needsYouSections
-        }
-    }
-
-    private func styledRow(_ item: InboxItem) -> some View {
-        Group {
-            switch style {
-            case .mail: MailInboxRow(item: item) { detail = $0 }
-            case .sections: NeedsYouInboxRow(item: item) { detail = $0 }
-            default: ActivityInboxRow(item: item) { detail = $0 }
-            }
-        }
-        .contextMenu {
-            InboxMenu(item: item) { path.append($0) }
-        }
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive) {
-                Task { try? await inbox.dismiss(item) }
-            } label: {
-                Label("Clear", systemImage: "xmark")
-            }
-        }
-    }
-
-    private func styledSection(_ items: [InboxItem]) -> some View {
-        Section {
-            ForEach(items) { styledRow($0) }
-        }
-    }
-
-    /// B: each notification its own card
-    @ViewBuilder
-    private var cardSections: some View {
-        ForEach(inbox.filtered(filter)) { item in
-            Section {
-                CardInboxRow(item: item) { detail = $0 }
-                    .contextMenu {
-                        InboxMenu(item: item) { path.append($0) }
-                    }
-            }
-            .listSectionSpacing(10)
-        }
-    }
-
-    /// D: what needs answering first, then group news, then the rest
-    @ViewBuilder
-    private var needsYouSections: some View {
-        let items = inbox.filtered(filter)
-        let needs = items.filter { [.invite, .inviteRequest, .friendRequest].contains($0.kind) }
-        let groups = items.filter { $0.kind == .group }
-        let rest = items.filter { !needs.contains($0) && !groups.contains($0) }
-        if !needs.isEmpty {
-            Section("Needs You") { ForEach(needs) { styledRow($0) } }
-        }
-        if !groups.isEmpty {
-            Section("Groups") {
-                ForEach(groups) { item in
-                    MailInboxRow(item: item) { detail = $0 }
-                        .contextMenu { InboxMenu(item: item) { path.append($0) } }
-                }
-            }
-        }
-        if !rest.isEmpty {
-            Section("Other") { ForEach(rest) { styledRow($0) } }
-        }
-    }
-
-    @ViewBuilder
-    private var currentSection: some View {
         let items = inbox.filtered(filter)
         Section {
             ForEach(items) { item in
