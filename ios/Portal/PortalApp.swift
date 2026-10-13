@@ -10,6 +10,7 @@ struct PortalApp: App {
     @State private var inbox: InboxStore
     @State private var feed: FeedStore
     @State private var push: PushStore
+    @State private var history: NotificationHistoryStore
     @State private var links = DeepLinks.shared
     @State private var actions = Actions()
     @State private var tab = Demo.isOn ? Demo.tab : AppTab.friends
@@ -19,6 +20,7 @@ struct PortalApp: App {
         let inbox = Demo.isOn ? Demo.inbox() : InboxStore()
         let feed = Demo.isOn ? Demo.feed() : FeedStore()
         let push = Demo.isOn ? PushStore(demo: true) : PushStore()
+        let history = Demo.isOn ? Demo.history() : NotificationHistoryStore()
         let session = Demo.isOn
             ? Demo.session(friends: friends, inbox: inbox, feed: feed)
             : SessionStore(friends: friends, inbox: inbox, feed: feed)
@@ -26,6 +28,8 @@ struct PortalApp: App {
         _inbox = State(initialValue: inbox)
         _feed = State(initialValue: feed)
         _push = State(initialValue: push)
+        _history = State(initialValue: history)
+        session.history = history
         AppDelegate.push = push
         session.push = push
         _session = State(initialValue: session)
@@ -43,11 +47,13 @@ struct PortalApp: App {
                 .environment(inbox)
                 .environment(feed)
                 .environment(push)
+                .environment(history)
                 .environment(actions)
                 .overlay(alignment: .bottom) { ToastView().environment(actions) }
                 .task {
                     actions.attach(session)
                     push.attach(session)
+                    history.attach(session)
                     session.onArrival = { item in
                         let name = item.senderName ?? "Someone"
                         actions.show("\(name): \(item.headline(worldName: nil))", symbol: "tray.and.arrow.down.fill")
@@ -89,6 +95,7 @@ struct PortalApp: App {
                         Task { await inbox.refreshIfStale() }
                         // Catches the feed up from where it got to, however long it's been
                         Task { await feed.refresh() }
+                        Task { await history.refresh() }
                     case .background:
                         session.stopLive()
                         BackgroundCheck.schedule()
@@ -166,7 +173,7 @@ extension Demo {
     static var tab: PortalApp.AppTab {
         switch screen {
         case .friends, .friend, .world, .signIn: .friends
-        case .inbox: .inbox
+        case .inbox, .history: .inbox
         case .feed: .feed
         case .you: .you
         }

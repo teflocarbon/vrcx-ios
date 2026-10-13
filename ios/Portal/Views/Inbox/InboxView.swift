@@ -1,19 +1,26 @@
 import SwiftUI
 
 /// Invites, invite requests, friend requests and group notices, each with
-/// its answers right in the row, as the wrist expands them
+/// its answers right in the row, as the wrist expands them; and, with a
+/// relay that keeps it, everything that came before
 struct InboxView: View {
     @Environment(InboxStore.self) private var inbox
+    @Environment(NotificationHistoryStore.self) private var history
     @Environment(FriendsStore.self) private var friends
     @State private var path: [Route] = []
-    @State private var filter: InboxFilter = .all
+    @State private var filter: InboxFilter = Demo.isOn && Demo.screen == .history ? .history : .all
+
+    /// History only when the relay keeps it
+    private var filters: [InboxFilter] {
+        InboxFilter.allCases.filter { $0 != .history || history.available }
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
             List {
                 Section {
-                    FilterChips(options: InboxFilter.allCases, selection: $filter, title: \.title, symbol: \.symbol) { option in
-                        inbox.filtered(option).count
+                    FilterChips(options: filters, selection: $filter, title: \.title, symbol: \.symbol) { option in
+                        option == .history ? nil : inbox.filtered(option).count
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
@@ -22,61 +29,21 @@ struct InboxView: View {
 
                 ConnectionBanner()
 
-                let items = inbox.filtered(filter)
-                Section {
-                    ForEach(items) { item in
-                        InboxRow(item: item) { path.append($0) }
-                            .contextMenu {
-                                InboxMenu(item: item) { path.append($0) }
-                            }
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    Task { try? await inbox.dismiss(item) }
-                                } label: {
-                                    Label("Clear", systemImage: "xmark")
-                                }
-                            }
-                            .swipeActions(edge: .leading) {
-                                if !item.seen {
-                                    Button {
-                                        Task { await inbox.markSeen(item) }
-                                    } label: {
-                                        Label("Read", systemImage: "envelope.open")
-                                    }
-                                    .tint(.accentColor)
-                                }
-                            }
-                    }
-                } footer: {
-                    if !items.isEmpty {
-                        Text("Clearing something here clears it in VRChat and VRCX too.")
-                    }
+                if filter == .history {
+                    historySections
+                } else {
+                    liveSection
                 }
             }
-            .overlay {
-                let items = inbox.filtered(filter)
-                if items.isEmpty && inbox.isLoading {
-                    ProgressView()
-                } else if items.isEmpty, let error = inbox.error {
-                    ContentUnavailableView {
-                        Label("Couldn't Load Your Inbox", systemImage: "wifi.exclamationmark")
-                    } description: {
-                        Text(error)
-                    } actions: {
-                        Button("Try Again") { Task { await inbox.refresh() } }
-                    }
-                } else if items.isEmpty {
-                    ContentUnavailableView(
-                        filter == .unread ? "All Caught Up" : "Nothing in Your Inbox",
-                        systemImage: filter == .unread ? "checkmark.circle" : "tray",
-                        description: Text("Invites, requests and group notices will show here.")
-                    )
-                }
+            .overlay { emptyState }
+            .refreshable {
+                async let live: Void = inbox.refresh()
+                async let past: Void = history.refresh()
+                _ = await (live, past)
             }
-            .refreshable { await inbox.refresh() }
             .navigationTitle("Inbox")
             .toolbar {
-                if inbox.unreadCount > 0 {
+                if inbox.unreadCount > 0 && filter != .history {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Mark All Read") {
                             Task { await inbox.markAllSeen() }
@@ -87,13 +54,131 @@ struct InboxView: View {
             .navigationDestination(for: Route.self) { route in
                 RouteView(route: route, path: $path)
             }
+            .task { await history.refresh() }
         }
+    }
+
+    @ViewBuilder
+    private var liveSection: some View {
+        let items = inbox.filtered(filter)
+        Section {
+            ForEach(items) { item in
+                InboxRow(item: item) { path.append($0) }
+                    .contextMenu {
+                        InboxMenu(item: item) { path.append($0) }
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            Task { try? await inbox.dismiss(item) }
+                        } label: {
+                            Label("Clear", systemImage: "xmark")
+                        }
+                    }
+                    .swipeActions(edge: .leading) {
+                        if !item.seen {
+                            Button {
+                                Task { await inbox.markSeen(item) }
+                            } label: {
+                                Label("Read", systemImage: "envelope.open")
+                            }
+                            .tint(.accentColor)
+                        }
+                    }
+            }
+        } footer: {
+            if !items.isEmpty {
+                Text("Clearing something here clears it in VRChat and VRCX too.")
+            }
+        }
+    }
+
+    /// Past notifications by day, as they ended up: answered, cleared, seen
+    @ViewBuilder
+    private var historySections: some View {
+        let calendar = Calendar.current
+        let days = Dictionary(grouping: history.entries) { calendar.startOfDay(for: $0.date) }
+        ForEach(days.keys.sorted(by: >), id: \.self) { day in
+            Section(Self.dayTitle(day)) {
+                ForEach(days[day]!.sorted { $0.date > $1.date }) { entry in
+                    InboxRow(item: entry.item, history: entry) { path.append($0) }
+                        .contextMenu {
+                            InboxMenu(item: entry.item, past: true) { path.append($0) }
+                        }
+                }
+            }
+        }
+        if history.hasMore && !history.entries.isEmpty {
+            Section {
+                Button {
+                    Task { await history.loadEarlier() }
+                } label: {
+                    HStack {
+                        Text("Load Earlier")
+                        Spacer()
+                        if history.isLoading { ProgressView() }
+                    }
+                }
+            } footer: {
+                Text("Your relay keeps every notification, including ones VRChat no longer has, and VRCX's own history once it's imported.")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if filter == .history {
+            if history.entries.isEmpty && history.isLoading {
+                ProgressView()
+            } else if history.entries.isEmpty, let error = history.error {
+                ContentUnavailableView {
+                    Label("Couldn't Load History", systemImage: "wifi.exclamationmark")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("Try Again") { Task { await history.refresh() } }
+                }
+            } else if history.entries.isEmpty {
+                ContentUnavailableView("No History Yet", systemImage: "clock.arrow.circlepath",
+                                       description: Text("Notifications your relay sees, and VRCX's once they're imported, will show here."))
+            }
+        } else {
+            let items = inbox.filtered(filter)
+            if items.isEmpty && inbox.isLoading {
+                ProgressView()
+            } else if items.isEmpty, let error = inbox.error {
+                ContentUnavailableView {
+                    Label("Couldn't Load Your Inbox", systemImage: "wifi.exclamationmark")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("Try Again") { Task { await inbox.refresh() } }
+                }
+            } else if items.isEmpty {
+                ContentUnavailableView(
+                    filter == .unread ? "All Caught Up" : "Nothing in Your Inbox",
+                    systemImage: filter == .unread ? "checkmark.circle" : "tray",
+                    description: Text("Invites, requests and group notices will show here.")
+                )
+            }
+        }
+    }
+
+    static func dayTitle(_ day: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(day) { return "Today" }
+        if calendar.isDateInYesterday(day) { return "Yesterday" }
+        if calendar.isDate(day, equalTo: Date(), toGranularity: .year) {
+            return day.formatted(.dateTime.weekday(.wide).day().month(.wide))
+        }
+        return day.formatted(date: .long, time: .omitted)
     }
 }
 
 /// One notification: who, what, when, their message, and the answers
 struct InboxRow: View {
     let item: InboxItem
+    /// Set for a past notification: shows what became of it, not answers
+    var history: HistoryEntry? = nil
     let open: (Route) -> Void
     @Environment(InboxStore.self) private var inbox
     @Environment(FriendsStore.self) private var friends
@@ -121,7 +206,7 @@ struct InboxRow: View {
                             .foregroundStyle(.yellow)
                             .accessibilityLabel("Favourite")
                     }
-                    if !item.seen {
+                    if !item.seen && history == nil {
                         Circle().fill(Color.accentColor).frame(width: 8, height: 8)
                             .accessibilityLabel("Unread")
                     }
@@ -182,6 +267,17 @@ struct InboxRow: View {
 
     @ViewBuilder
     private var answers: some View {
+        if let history {
+            if let outcome = history.outcome {
+                Badge(outcome.text, color: outcome.text == "Answered" ? Palette.canJoin : .secondary, symbol: outcome.symbol)
+            }
+        } else {
+            liveAnswers
+        }
+    }
+
+    @ViewBuilder
+    private var liveAnswers: some View {
         let busy = inbox.isBusy(item)
         HStack(spacing: 8) {
             switch item.kind {
@@ -327,6 +423,8 @@ struct InboxRow: View {
 /// Press and hold on a notification
 struct InboxMenu: View {
     let item: InboxItem
+    /// A past notification: nothing left to mark or clear
+    var past = false
     let open: (Route) -> Void
     @Environment(InboxStore.self) private var inbox
 
@@ -346,7 +444,7 @@ struct InboxMenu: View {
             }
         }
         Section {
-            if !item.seen {
+            if !item.seen && !past {
                 Button {
                     Task { await inbox.markSeen(item) }
                 } label: {
@@ -361,11 +459,13 @@ struct InboxMenu: View {
                 }
             }
         }
-        Section {
-            Button(role: .destructive) {
-                Task { try? await inbox.dismiss(item) }
-            } label: {
-                Label("Clear", systemImage: "xmark")
+        if !past {
+            Section {
+                Button(role: .destructive) {
+                    Task { try? await inbox.dismiss(item) }
+                } label: {
+                    Label("Clear", systemImage: "xmark")
+                }
             }
         }
     }

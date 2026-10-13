@@ -191,38 +191,50 @@ struct FilterChips<Value: Hashable & Identifiable>: View {
     var count: ((Value) -> Int?)?
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(options) { option in
-                    let selected = option == selection
-                    let number = count?(option)
-                    Button {
-                        withAnimation(.snappy) { selection = option }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: symbol(option))
-                            Text(title(option))
-                            if let number {
-                                Text("\(number)")
-                                    .foregroundStyle(selected ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.secondary))
-                            }
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-                        .background(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.fill.tertiary), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    // An empty filter is still choosable, just quieter
-                    .opacity(number == 0 && !selected ? 0.5 : 1)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                }
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                chips
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
+            .scrollClipDisabled()
+            // The chosen chip is always in view, even one far along the row
+            .onAppear { proxy.scrollTo(selection.id, anchor: .center) }
+            .onChange(of: selection) { _, chosen in
+                withAnimation(.snappy) { proxy.scrollTo(chosen.id, anchor: .center) }
+            }
         }
-        .scrollClipDisabled()
+    }
+
+    private var chips: some View {
+        HStack(spacing: 8) {
+            ForEach(options) { option in
+                let selected = option == selection
+                let number = count?(option)
+                Button {
+                    withAnimation(.snappy) { selection = option }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: symbol(option))
+                        Text(title(option))
+                        if let number {
+                            Text("\(number)")
+                                .foregroundStyle(selected ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.secondary))
+                        }
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                    .background(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.fill.tertiary), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                // An empty filter is still choosable, just quieter
+                .opacity(number == 0 && !selected ? 0.5 : 1)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .id(option.id)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
     }
 }
 

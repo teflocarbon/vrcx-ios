@@ -37,6 +37,8 @@ final class SessionStore {
     @ObservationIgnored var onArrival: ((InboxItem) -> Void)?
     /// So signing out can stop the relay pushing to this phone
     @ObservationIgnored weak var push: PushStore?
+    /// So new notifications reach the history too
+    @ObservationIgnored weak var history: NotificationHistoryStore?
     private let isDemo: Bool
 
     private static let connectionKey = "connection"
@@ -252,8 +254,9 @@ final class SessionStore {
         guard !isDemo, api != nil else { return }
         async let people: Void = friends.refresh()
         async let notices: Void = inbox.refresh()
-        async let history: Void = feed.refresh()
-        _ = await (people, notices, history)
+        async let activity: Void = feed.refresh()
+        async let past: Void = history?.refresh() ?? ()
+        _ = await (people, notices, activity, past)
     }
 
     /// Start the pipeline, while Portal is on screen
@@ -295,7 +298,10 @@ final class SessionStore {
             feed.nudge(offline: event.type == "friend-offline")
             return
         }
-        if inbox.apply(event, arrived: { [weak self] item in self?.onArrival?(item) }) { return }
+        if inbox.apply(event, arrived: { [weak self] item in self?.onArrival?(item) }) {
+            history?.nudge()
+            return
+        }
         switch event.type {
         case "user-location":
             guard var me, let content = event.decode(SelfLocation.self) else { return }

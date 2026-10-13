@@ -46,6 +46,8 @@ final class InboxStore {
         case .social: list = items.filter(\.isSocial)
         case .groups: list = items.filter { $0.kind == .group }
         case .unread: list = items.filter { !$0.seen }
+        // The relay's history has its own store
+        case .history: list = []
         }
         return list.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }

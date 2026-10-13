@@ -9,7 +9,7 @@ enum Demo {
     static let isOn = ProcessInfo.processInfo.arguments.contains("-demo")
 
     enum Screen: String, CaseIterable {
-        case friends, friend, world, inbox, feed, you, signIn
+        case friends, friend, world, inbox, history, feed, you, signIn
     }
 
     static var screen: Screen {
@@ -214,6 +214,37 @@ enum Demo {
             notification(2, "requestInvite", from: 3, minutes: 18, details: "{\"requestMessage\":\"can I join?\"}"),
             notification(3, "friendRequest", from: 11, minutes: 95, seen: true),
             InboxItem(source: .v2(group)),
+        ])
+    }
+
+    @MainActor static func history() -> NotificationHistoryStore {
+        func past(_ n: Int, _ type: String, from person: Int, minutes: Double, world: String? = nil,
+                  note: String? = nil, responded: Bool = false, hidden: Bool = false) -> HistoryEntry {
+            var notification = VRCNotification(id: String(format: "not_00000000-0000-0000-0000-%012ld", 100 + n), type: type)
+            notification.senderUserId = userId(person)
+            notification.senderUsername = people[person - 1].name
+            notification.createdAt = ago(minutes)
+            notification.seen = true
+            notification.details = VRCNotification.Details(
+                worldId: world, worldName: world.flatMap { w in worlds.first { w.hasPrefix($0.id) }?.name },
+                inviteMessage: type == "invite" ? note : nil, requestMessage: type == "requestInvite" ? note : nil,
+                responseMessage: nil)
+            return HistoryEntry(id: notification.id, seq: 100 - n, item: InboxItem(source: .v1(notification)),
+                                seen: true, hidden: hidden, responded: responded, expired: hidden || responded)
+        }
+        var group = VRCNotificationV2(id: "not_00000000-0000-0000-0000-000000000199", type: "group.announcement")
+        group.title = "Test Group posted an announcement"
+        group.message = "Thanks for coming to movie night! Next one is in two weeks."
+        group.createdAt = ago(60 * 30)
+        group.seen = true
+        group.imageUrl = picture("popcorn.fill", 0xC2366B, 0xE0A040)
+        return NotificationHistoryStore(demoEntries: [
+            past(1, "invite", from: 5, minutes: 95, world: instance(1, 48213), note: "come say hi", responded: true),
+            past(2, "requestInvite", from: 6, minutes: 140, hidden: true),
+            past(3, "invite", from: 1, minutes: 60 * 26, world: instance(6, 22222), hidden: true),
+            HistoryEntry(id: group.id, seq: 40, item: InboxItem(source: .v2(group)), seen: true, hidden: false,
+                         responded: false, expired: false),
+            past(4, "inviteResponse", from: 2, minutes: 60 * 50),
         ])
     }
 

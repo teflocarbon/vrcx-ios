@@ -38,6 +38,16 @@ struct VRCNotification: Codable, Sendable, Hashable, Identifiable {
             self.init(try Plain(from: decoder))
         }
 
+        init(worldId: String?, worldName: String?, inviteMessage: String?, requestMessage: String?,
+             responseMessage: String?, platform: String? = nil) {
+            self.worldId = worldId
+            self.worldName = worldName
+            self.inviteMessage = inviteMessage
+            self.requestMessage = requestMessage
+            self.responseMessage = responseMessage
+            self.platform = platform
+        }
+
         private init(_ plain: Plain) {
             worldId = plain.worldId
             worldName = plain.worldName
@@ -91,13 +101,13 @@ struct VRCNotificationV2: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// One row in the Inbox, from either kind of notification
-struct InboxItem: Identifiable, Hashable, Sendable {
+struct InboxItem: Codable, Identifiable, Hashable, Sendable {
     enum Kind: Sendable, Hashable {
         case invite, inviteRequest, friendRequest, inviteResponse, requestResponse, message
         case group, other
     }
 
-    enum Source: Sendable, Hashable {
+    enum Source: Codable, Sendable, Hashable {
         case v1(VRCNotification)
         case v2(VRCNotificationV2)
     }
@@ -209,7 +219,7 @@ struct InboxItem: Identifiable, Hashable, Sendable {
 }
 
 enum InboxFilter: String, CaseIterable, Identifiable, Sendable {
-    case all, social, groups, unread
+    case all, social, groups, unread, history
 
     var id: String { rawValue }
 
@@ -219,6 +229,7 @@ enum InboxFilter: String, CaseIterable, Identifiable, Sendable {
         case .social: "person.2"
         case .groups: "person.3"
         case .unread: "envelope.badge"
+        case .history: "clock.arrow.circlepath"
         }
     }
 
@@ -228,6 +239,7 @@ enum InboxFilter: String, CaseIterable, Identifiable, Sendable {
         case .social: "Social"
         case .groups: "Groups"
         case .unread: "Unread"
+        case .history: "History"
         }
     }
 }
