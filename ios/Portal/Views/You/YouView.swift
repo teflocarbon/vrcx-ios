@@ -6,6 +6,8 @@ struct YouView: View {
     @Environment(FriendsStore.self) private var store
     @State private var path: [Route] = []
     @Environment(PushStore.self) private var push
+    /// Trying out the Inbox's looks
+    @AppStorage("inboxStyle") private var inboxStyle: InboxStyle = .current
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -80,6 +82,9 @@ struct YouView: View {
                 Section("Developer") {
                     NavigationLink("Network Log") { NetworkLogView() }
                     NavigationLink("Live Events") { EventLogView() }
+                    Picker("Inbox Style", selection: $inboxStyle) {
+                        ForEach(InboxStyle.allCases) { Text($0.title).tag($0) }
+                    }
                 }
 
                 Section("About") {

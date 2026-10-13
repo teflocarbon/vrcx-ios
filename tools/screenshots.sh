@@ -39,9 +39,11 @@ mkdir -p "$OUT"
 for appearance in light dark; do
     xcrun simctl ui "$UDID" appearance "$appearance"
     for screen in "${SCREENS[@]}"; do
-        xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE_ID" -demo -demoScreen "$screen" >/dev/null
+        # EXTRA_ARGS: more launch arguments, e.g. "-inboxStyle cards" (they
+        # set UserDefaults for that launch)
+        xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE_ID" -demo -demoScreen "$screen" ${EXTRA_ARGS:-} >/dev/null
         sleep 4
-        xcrun simctl io "$UDID" screenshot --type=png "$OUT/$screen-$appearance.png" >/dev/null 2>&1
+        xcrun simctl io "$UDID" screenshot --type=png "$OUT/${PREFIX:-}$screen-$appearance.png" >/dev/null 2>&1
         echo "  $screen ($appearance)"
     done
 done
