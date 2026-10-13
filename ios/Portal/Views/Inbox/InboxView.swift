@@ -454,6 +454,13 @@ struct InboxMenu: View {
                 Label("Open Profile", systemImage: "person.crop.circle")
             }
         }
+        if let group = item.groupId {
+            Button {
+                open(.group(group))
+            } label: {
+                Label("View Group", systemImage: "person.3")
+            }
+        }
         if let location = item.location, Location(location).isInstance {
             Button {
                 open(.instance(location))

@@ -6,6 +6,7 @@ enum Route: Hashable {
     case user(String)
     case world(String)
     case instance(String)
+    case group(String)
 }
 
 /// The things you can do to or for someone, with a short message after

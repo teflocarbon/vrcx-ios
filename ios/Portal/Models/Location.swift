@@ -125,6 +125,7 @@ struct Location: Hashable, Sendable {
             switch groupAccessType {
             case "public": "Group Public"
             case "plus": "Group+"
+            case "members": "Group Members"
             default: "Group"
             }
         case nil: ""

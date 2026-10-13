@@ -159,6 +159,16 @@ struct InboxItem: Codable, Identifiable, Hashable, Sendable {
         return name.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// The group a notice is from: VRChat names it as the sender, or in the
+    /// notice's link ("group:grp_…")
+    var groupId: String? {
+        guard case .v2(let n) = source else { return nil }
+        if let sender = n.senderUserId, sender.hasPrefix("grp_") { return sender }
+        guard let link = n.link, let range = link.range(of: "grp_") else { return nil }
+        let id = link[range.lowerBound...].prefix { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
+        return id.count > 10 ? String(id) : nil
+    }
+
     /// Who or what it's from, for the row's name: a group notice leads with
     /// its title ("Test Group posted an announcement")
     var displayName: String? {

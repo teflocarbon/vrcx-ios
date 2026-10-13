@@ -43,7 +43,13 @@ struct InstanceView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                         if let group = store.group(for: place) {
-                            GroupLabel(group: group)
+                            Button { open(.group(group.id)) } label: {
+                                HStack(spacing: 4) {
+                                    GroupLabel(group: group)
+                                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                                }
+                            }
+                            .buttonStyle(.plain)
                         }
                         HStack(spacing: 6) {
                             Badge(place.accessName, color: .accentColor)
@@ -100,11 +106,13 @@ struct InstanceView: View {
 
             Section("Details") {
                 if let group = store.group(for: place) {
-                    LabeledContent("Group") {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(group.name ?? "Group")
-                            if let code = group.code {
-                                Text(code).font(.caption).foregroundStyle(.tertiary)
+                    NavigationLink(value: Route.group(group.id)) {
+                        LabeledContent("Group") {
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(group.name ?? "Group")
+                                if let code = group.code {
+                                    Text(code).font(.caption).foregroundStyle(.tertiary)
+                                }
                             }
                         }
                     }

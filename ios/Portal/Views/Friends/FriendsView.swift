@@ -153,6 +153,8 @@ struct RouteView: View {
             WorldView(worldId: id) { path.append($0) }
         case .instance(let location):
             InstanceView(location: location) { path.append($0) }
+        case .group(let id):
+            GroupView(groupId: id) { path.append($0) }
         }
     }
 }
@@ -162,6 +164,7 @@ extension Demo {
         switch screen {
         case .friend: [.user(userId(1))]
         case .world: [.world(worldId(1))]
+        case .group: [.group(groupId)]
         default: []
         }
     }

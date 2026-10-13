@@ -9,7 +9,7 @@ enum Demo {
     static let isOn = ProcessInfo.processInfo.arguments.contains("-demo")
 
     enum Screen: String, CaseIterable {
-        case friends, friend, world, inbox, history, feed, you, signIn
+        case friends, friend, world, group, inbox, history, feed, you, signIn
     }
 
     static var screen: Screen {
@@ -286,5 +286,44 @@ enum Demo {
             item(9, .offline, person: 12, minutes: 60 * 22),
             item(10, .online, person: 3, minutes: 60 * 26, location: "private"),
         ])
+    }
+}
+
+// MARK: A group, for its page
+
+extension Demo {
+    static let groupId = "grp_00000000-0000-0000-0000-000000000001"
+
+    static var groupDetail: VRCGroupDetail {
+        VRCGroupDetail(
+            id: groupId, name: "Test Group", shortCode: "TESTGR", discriminator: "0001",
+            description: "A made-up group, shown for screenshots. We host movie nights, karaoke and a quiet hangout most evenings. Everyone's welcome; be kind.",
+            iconUrl: picture("popcorn.fill", 0xC2366B, 0xE0A040), bannerUrl: picture("w.film.stack", 0x4B5FD0, 0xC2366B),
+            privacy: "default", joinState: "open",
+            rules: "Be kind. No spamming invites. Keep it friendly for everyone.",
+            links: ["https://example.com/test-group"], languages: ["eng"],
+            memberCount: 1_842, onlineMemberCount: 63, isVerified: false, createdAt: "2024-05-01T12:00:00Z",
+            membershipStatus: "member",
+            myMember: .init(isRepresenting: true, isSubscribedToAnnouncements: true, joinedAt: "2025-02-10T12:00:00Z")
+        )
+    }
+
+    static var groupInstances: [VRCGroupInstance] {
+        [
+            VRCGroupInstance(instanceId: nil,
+                             location: "\(worldId(6)):34567~group(\(groupId))~groupAccessType(public)~region(eu)",
+                             world: worlds[5], memberCount: 18),
+            VRCGroupInstance(instanceId: nil,
+                             location: "\(worldId(2)):45678~group(\(groupId))~groupAccessType(members)~region(use)",
+                             world: worlds[1], memberCount: 6),
+        ]
+    }
+
+    static var groupPosts: [VRCGroupPost] {
+        [
+            VRCGroupPost(id: "gpost_00000000-0000-0000-0000-000000000001", title: "Movie night on Saturday",
+                         text: "Movie night is on Saturday at 8. Bring snacks, and a friend if you like.",
+                         createdAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-5 * 3600))),
+        ]
     }
 }

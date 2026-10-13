@@ -172,7 +172,7 @@ private struct ToastView: View {
 extension Demo {
     static var tab: PortalApp.AppTab {
         switch screen {
-        case .friends, .friend, .world, .signIn: .friends
+        case .friends, .friend, .world, .group, .signIn: .friends
         case .inbox, .history: .inbox
         case .feed: .feed
         case .you: .you
